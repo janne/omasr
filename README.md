@@ -79,8 +79,9 @@ omarchy plugin enable omasr.radio --section left
 `.git` suffix is optional. Plugins land disabled so you can read the code
 first, which is why enabling is a second step.
 
-Requires **mpv** (`sudo pacman -S mpv`), which decodes the stream. The panel
-says so plainly if it is missing.
+Decoding is done by **mpv**, which Omarchy already installs -- it is in
+`omarchy-base.packages`, so there is nothing to add. The panel says so plainly
+if it is ever missing.
 
 ### From a checkout
 
@@ -105,8 +106,9 @@ one step, no restart. Installed from a checkout, it unlinks instead and leaves
 the working copy alone.
 
 Your settings live in the widget's entry in `~/.config/omarchy/shell.json`, so
-they go with it; re-adding starts from the defaults. **mpv** stays installed,
-being a package in its own right.
+they go with it; re-adding starts from the defaults. Nothing else of yours is
+touched: the plugin only ever writes to its own mpv control socket under
+`$XDG_RUNTIME_DIR`, and mpv is Omarchy's package, not ours.
 
 To keep it installed but take it off the bar, use `omarchy plugin disable
 omasr.radio`. Enabling it again puts it in its default section rather than
