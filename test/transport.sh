@@ -45,6 +45,17 @@ ready() {
   return 1
 }
 
+# Resolve a clock time (HH:MM:SS) to the epoch second nearest a reference,
+# so comparisons keep working across midnight -- 23:50 is *before* 00:10, and
+# a suite that runs past midnight would otherwise read it as a day later.
+epoch_near() {
+  local clock="$1" ref="$2" e
+  e=$(date -d "$(date -d "@$ref" +%Y-%m-%d) $clock" +%s 2>/dev/null) || return 1
+  while [ $((e - ref)) -gt 43200 ]; do e=$((e - 86400)); done
+  while [ $((ref - e)) -gt 43200 ]; do e=$((e + 86400)); done
+  echo "$e"
+}
+
 ok()   { PASS=$((PASS+1)); printf '    ok    %s\n' "$1"; }
 no()   { FAIL=$((FAIL+1)); printf '    FAIL  %s\n       got: %s\n' "$1" "$2"; }
 skip() { SKIP=$((SKIP+1)); printf '    skip  %s (%s)\n' "$1" "$2"; }
@@ -210,6 +221,34 @@ if group "landing"; then
   fi
 fi
 
+# ------------------------------------------- walking back must not dead-end
+if group "walkback"; then
+  # Not every scheduled entry has an episode behind it, and the walk has to
+  # step over those rather than stop on one. It used to stop: the lookup for a
+  # missing id is a 404, and the failure never called back, so the chain that
+  # carries the walk forward simply ended.
+  sr play $CH >/dev/null; sleep 10
+  for _ in 1 2 3; do sr stepBack >/dev/null; settle; done
+  ready
+  early=$(clock)
+  for _ in 1 2 3 4 5 6 7 8; do sr stepBack >/dev/null; settle; done
+  ready
+  later=$(clock)
+  if [ -z "$early" ] || [ -z "$later" ]; then
+    skip "eight more steps back keep going" "no playhead"
+  else
+    now=$(date +%s)
+    moved=$(( $(epoch_near "$early" "$now") - $(epoch_near "$later" "$now") ))
+    # Eight programmes is well over half an hour of schedule; a dead end shows
+    # up as barely moving at all.
+    if [ "$moved" -gt 1800 ]; then
+      ok "eight more steps back keep going"
+    else
+      no "eight more steps back keep going" "only ${moved}s further back ($early -> $later)"
+    fi
+  fi
+fi
+
 # ------------------------------- a small seek must not change what "back" means
 if group "landing"; then
   # Stepping back after a short rewind must still reach the start of the
@@ -226,7 +265,7 @@ if group "landing"; then
   if [ -z "$sched" ] || [ -z "$landed" ]; then
     skip "back after a short rewind still reaches this programme" "no schedule or playhead"
   else
-    delta=$(( $(date -d "today $landed" +%s) - sched ))
+    delta=$(( $(epoch_near "$landed" "$sched") - sched ))
     # A couple of seconds either side is as sharp as this gets: positions come
     # from segment boundaries about six seconds apart, and SR's own schedule
     # times are not exactly when the audio changes. The regression this guards

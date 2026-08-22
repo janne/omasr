@@ -62,7 +62,9 @@ end of the previous programme.
 
 Past the window, published files are the only way back. SR publishes most
 produced programmes, often while still on air, and generally nothing for live
-desks until they finish; stepping back through the schedule uses those.
+desks until they finish; stepping back through the schedule uses those, and
+steps over the entries it finds nothing for. In practice that reaches back
+most of a day.
 
 Pausing counts as stepping back: the broadcast carries on without you, and
 resuming picks up where you stopped. **Direkt** returns to the live edge.

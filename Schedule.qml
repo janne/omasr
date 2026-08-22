@@ -233,6 +233,9 @@ Item {
   // Look up a published file for an episode. Calls back with null when SR has
   // nothing for it, which is the normal case for a programme still on air.
   function resolveAudio(episodeId, startMs, title, callback) {
+    // Not every scheduled entry has an episode behind it, and asking for id 0
+    // is a 404 rather than an empty answer.
+    if (!episodeId || episodeId <= 0) { callback(null); return }
     getJson("https://api.sr.se/api/v2/episodes/get?id=" + episodeId + "&format=json",
       function(data) {
         var ep = data && data.episode
@@ -250,12 +253,18 @@ Item {
       })
   }
 
+  // Always calls back, with null when there is nothing to hand over. Callers
+  // chain on this -- stepping back through programmes recurses from inside the
+  // callback -- so a request that failed silently would end the chain rather
+  // than move it along.
   function getJson(url, callback) {
     var xhr = new XMLHttpRequest()
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== XMLHttpRequest.DONE) return
-      if (xhr.status < 200 || xhr.status >= 300) return
-      try { callback(JSON.parse(xhr.responseText)) } catch (e) { /* stale/garbled */ }
+      if (xhr.status < 200 || xhr.status >= 300) { callback(null); return }
+      var parsed = null
+      try { parsed = JSON.parse(xhr.responseText) } catch (e) { parsed = null }
+      callback(parsed)
     }
     xhr.open("GET", url)
     xhr.send()

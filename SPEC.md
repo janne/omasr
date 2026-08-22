@@ -144,8 +144,9 @@ without you and resuming picks up where you stopped.
 ## Known limits
 
 - **Beyond about three hours**, only published programmes can be reached. The
-  DVR window ends there, and SR publishes nothing for live desks until after
-  they finish, so a bulletin from this morning may be unreachable.
+  DVR window ends there, so the walk continues through SR's published files
+  and how far it reaches depends on what SR has published. Entries with no
+  episode behind them at all are stepped over, not stopped on.
 - **Restarting the stream costs a second or two.** Any move outside what the
   player has buffered respawns it, so a large jump has a short gap.
 - **Positions round to a segment boundary**, so a jump lands within about six
