@@ -94,6 +94,24 @@ omarchy shell shell rescanPlugins
 omarchy plugin enable omasr.radio --section left
 ```
 
+## Removing it
+
+```bash
+omarchy plugin remove omasr.radio
+```
+
+That takes it off the bar, unloads it from the running shell, and deletes it —
+one step, no restart. Installed from a checkout, it unlinks instead and leaves
+the working copy alone.
+
+Your settings live in the widget's entry in `~/.config/omarchy/shell.json`, so
+they go with it; re-adding starts from the defaults. **mpv** stays installed,
+being a package in its own right.
+
+To keep it installed but take it off the bar, use `omarchy plugin disable
+omasr.radio`. Enabling it again puts it in its default section rather than
+where you had it, so pass `--section` if you had moved it.
+
 ## Settings
 
 Configured per bar-widget instance, in Setup > Plugins or directly in the
