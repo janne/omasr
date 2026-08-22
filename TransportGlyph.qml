@@ -12,9 +12,10 @@ import qs.Commons
 //   play   / pause -- the middle button's two faces.
 //   edge   the |< and >| marks that step between programmes.
 //
-// Only the geometry is mirrored, never the whole item: the jump length has to
-// stay readable on the forward button, so it is a sibling of the mirrored
-// container rather than a child of it.
+// The skip arrow is authored as the *back* arrow, so `mirrored` reads as
+// "forward". Only the geometry is mirrored, never the whole item: the jump
+// length has to stay readable on the forward button, so it is a sibling of
+// the mirrored container rather than a child of it.
 Item {
   id: root
 
@@ -49,6 +50,11 @@ Item {
 
       // The ring, broken at the top where the arrow head sits. 0 degrees is 3
       // o'clock and angles increase clockwise, so the gap straddles 270.
+      //
+      // The sweep runs anticlockwise, which is the direction a rewind turns:
+      // down the left of the ring, round the bottom, and back up the right to
+      // meet the head. Head and sweep have to agree, or the icon reads as
+      // pointing one way while circling the other.
       ShapePath {
         strokeColor: root.color
         strokeWidth: 11
@@ -58,21 +64,21 @@ Item {
         PathAngleArc {
           centerX: 50; centerY: 56
           radiusX: 39; radiusY: 39
-          startAngle: 295
-          sweepAngle: 300
+          startAngle: 245
+          sweepAngle: -300
         }
       }
 
-      // Head at the left end of the break, pointing the way a rewind travels:
-      // leftwards over the top of the ring.
+      // Head at the right end of the break, where that anticlockwise sweep
+      // arrives, pointing on round the way it is travelling.
       ShapePath {
         strokeWidth: 0
         fillColor: root.color
         fillRule: ShapePath.WindingFill
 
-        startX: 2;  startY: 20
-        PathLine { x: 38; y: 0 }
-        PathLine { x: 38; y: 40 }
+        startX: 98; startY: 20
+        PathLine { x: 62; y: 0 }
+        PathLine { x: 62; y: 40 }
       }
     }
 

@@ -23,9 +23,13 @@ Once something is playing, the transport appears.
   behind it. Click or drag anywhere in it to seek.
 - **↺ 15 / ↻ 15** jump a quarter minute either way. Forward is dimmed while you
   are live, because there is nothing there yet.
-- **|◀** jumps to the earliest point still buffered. Press it again there and,
-  if SR has published the previous programme, it plays that instead.
+- **|◀** goes to the beginning of the programme you are hearing. Press it again
+  within three seconds and it steps back to the previous programme instead —
+  the convention every music player uses.
 - **▶|** returns to the live broadcast.
+
+Hovering a channel puts its full station name in the panel header, which is
+where you can see which regional station P4 is pointed at.
 
 ### How far back you can go
 
@@ -36,15 +40,19 @@ through everything it has already received.
 
 So **the rewindable window is everything since you tuned in**, not the whole
 programme. Tune in at 10:30 to a programme that started at 10:03 and the first
-27 minutes are not reachable — the timeline shows this, with the bright
-scrubbable section starting where your buffer does. Pausing counts as stepping
-back: the broadcast carries on without you, and resuming picks up where you
-stopped.
+27 minutes are not reachable from the buffer — the timeline shows this, with
+the bright scrubbable section starting where your buffer does. Pausing counts
+as stepping back: the broadcast carries on without you, and resuming picks up
+where you stopped.
 
-Programmes that have already finished are a separate matter. SR publishes most
-of them as files, and where it has, **|◀** plays the previous programme in full
-with ordinary seeking. Where it has not — which is normal for a programme still
-on air — the button stays dimmed rather than offering a dead control.
+Published files fill in the rest. SR publishes many programmes as a file, and
+where one exists **|◀** switches to it and plays the programme from its real
+start, with ordinary seeking throughout — so you are not limited to the buffer
+after all. This is common for produced programmes, which are often published
+while still on air, and uncommon for live desks like the news, which generally
+have nothing until they finish. The same applies to the previous programme.
+When SR has published nothing, **|◀** falls back to the start of the buffer,
+which is the furthest back that actually exists.
 
 ## Install
 
@@ -92,6 +100,8 @@ omarchy-shell omasr pause          # play/pause
 omarchy-shell omasr back 30        # seconds, default 15
 omarchy-shell omasr forward 30
 omarchy-shell omasr live           # back to the live edge
+omarchy-shell omasr stepBack       # what the |< button does
+omarchy-shell omasr fromStart      # the current programme from its start
 omarchy-shell omasr restart        # to the start of the buffer
 omarchy-shell omasr previous       # the previous programme, if published
 ```
@@ -130,6 +140,13 @@ child process costs one fork, is killed with a signal, and shows up in the
 audio mixer as "Sveriges Radio" so its volume is adjustable like any other app.
 It runs with `--no-config`, so a personal `~/.config/mpv/mpv.conf` cannot reach
 into the bar widget.
+
+**No Qt Quick Controls popups.** `ToolTip`, `Menu` and the rest are `Popup`s,
+and inside a Quickshell layer-shell window they draw nothing while their
+overlay quietly swallows every click in the panel. A tooltip on the channel
+tiles is what first showed this up: it never appeared, and once the pointer
+had been over a tile the panel stopped responding. Anything popup-shaped here
+has to be a plain item in the scene instead.
 
 **Seeking.** mpv runs with a JSON IPC socket. Rather than polling it, the
 player asks mpv to push the properties the transport needs (`time-pos`,

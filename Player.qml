@@ -38,6 +38,8 @@ Item {
   property string channelKey: ""
   property string channelName: ""
   property string station: ""
+  // Programme title, when playing a published file rather than the live feed.
+  property string programme: ""
 
   // "idle" | "connecting" | "playing" | "error"
   property string status: "idle"
@@ -153,6 +155,7 @@ Item {
     channelKey = ""
     channelName = ""
     station = ""
+    programme = ""
     nowPlaying = ""
     status = "idle"
     lastError = ""
@@ -213,10 +216,12 @@ Item {
     timeShifted = false
   }
 
+  // The earliest point reachable: position 0 of a published file, or the
+  // oldest thing still buffered on a live stream.
   function seekToStart() {
     if (!canSeek) return
     if (mode === "live") timeShifted = true
-    ipc.command(["seek", Math.max(0, cacheBegin), "absolute"])
+    ipc.command(["seek", mode === "ondemand" ? 0 : Math.max(0, cacheBegin), "absolute"])
   }
 
   // --- process lifecycle ---------------------------------------------------
@@ -254,6 +259,7 @@ Item {
     channelKey = source.key
     channelName = source.name
     station = source.station
+    programme = source.programme || ""
     nowPlaying = ""
     lastError = ""
     status = "connecting"

@@ -20,8 +20,9 @@ Item {
   readonly property bool ready: player ? player.canSeek : false
   readonly property bool hasWindow: schedule ? schedule.valid : false
 
-  // Only offer the previous programme when SR has actually published it.
+  // Only offer a programme when SR has actually published it as a file.
   readonly property var prevAudio: schedule ? schedule.prevAudio : null
+  readonly property var currentAudio: schedule ? schedule.currentAudio : null
   readonly property bool onDemand: player ? player.mode === "ondemand" : false
 
   // Which programme the *playhead* is inside, which is not always the one on
@@ -35,19 +36,21 @@ Item {
     && player.playheadWallMs > 0
     && player.playheadWallMs < schedule.currentStartMs
 
+  // A published file carries its own window, so take it from the player
+  // rather than guessing which scheduled episode it corresponds to.
   readonly property double windowStartMs: {
-    if (onDemand && prevAudio) return prevAudio.startMs
+    if (onDemand) return player ? player.originWallMs : 0
     if (!schedule) return 0
     return inPreviousProgramme ? schedule.prevStartMs : schedule.currentStartMs
   }
   readonly property double windowEndMs: {
-    if (onDemand && prevAudio) return prevAudio.startMs + prevAudio.duration * 1000
+    if (onDemand) return player ? player.originWallMs + player.duration * 1000 : 0
     if (!schedule) return 0
     return inPreviousProgramme ? schedule.prevEndMs : schedule.currentEndMs
   }
   // The programme actually being heard.
   readonly property string programmeTitle: {
-    if (onDemand && prevAudio) return prevAudio.title
+    if (onDemand) return player ? player.programme : ""
     if (!schedule) return ""
     return inPreviousProgramme ? schedule.prevTitle : schedule.currentTitle
   }
@@ -58,8 +61,24 @@ Item {
   readonly property bool canStepForward: ready && (onDemand || !isLive)
   readonly property bool canForward15: ready && !isLive && player.behindLiveSec > 1.5
 
+  signal stepBackRequested()
   signal playPrevious()
+  signal playCurrentFromStart()
   signal returnToCurrent()
+
+  // Where "the beginning of this programme" actually lands. A published file
+  // starts at the programme's real start; a live stream can only go back as
+  // far as the buffer, unless SR has published the programme being heard.
+  readonly property double programmeStartMs: {
+    if (!player) return windowStartMs
+    if (onDemand || currentAudio) return windowStartMs
+    return Math.max(windowStartMs, player.seekableStartWallMs)
+  }
+
+  // Already at the beginning, by the usual few-seconds grace that makes a
+  // second press mean "the one before this".
+  readonly property bool atProgrammeStart: !!player
+    && (player.playheadWallMs - programmeStartMs) < 3000
 
   implicitHeight: column.implicitHeight
 
@@ -182,14 +201,9 @@ Item {
         foreground: root.foreground
         fontFamily: root.fontFamily
         glyphSize: Style.space(15)
-        onActivated: {
-          // At the start of what we can reach already? Then step back a
-          // programme, if SR has published one.
-          var atStart = root.player
-            && (root.player.playheadWallMs - root.player.seekableStartWallMs) < 2000
-          if (atStart && root.prevAudio && !root.onDemand) root.playPrevious()
-          else if (root.player) root.player.seekToStart()
-        }
+        // The rule itself lives on the panel, so the keyboard and IPC paths
+        // step back the same way this button does.
+        onActivated: root.stepBackRequested()
       }
 
       TransportButton {

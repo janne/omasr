@@ -32,8 +32,15 @@ Item {
   property int nextEpisodeId: 0
   property double nextStartMs: 0
 
-  // Resolved on-demand audio for the previous programme, when SR has
-  // published it: { url, duration, startMs, title }.
+  // Resolved on-demand audio, when SR has published it: { url, duration,
+  // startMs, title }.
+  //
+  // `currentAudio` is the useful one: SR publishes many programmes as a file
+  // while they are still on air, so where it exists the programme can be
+  // played from its real start rather than only back to wherever the live
+  // buffer happens to begin. Live desks -- news, morning shows -- generally
+  // have nothing until after they finish, so this is often null.
+  property var currentAudio: null
   property var prevAudio: null
 
   readonly property bool valid: currentEndMs > 0
@@ -48,6 +55,7 @@ Item {
 
   function clear() {
     currentTitle = ""; currentProgram = ""; currentStartMs = 0; currentEndMs = 0; currentEpisodeId = 0
+    currentAudio = null
     prevTitle = ""; prevEpisodeId = 0; prevStartMs = 0; prevEndMs = 0
     nextTitle = ""; nextEpisodeId = 0; nextStartMs = 0
     prevAudio = null
@@ -87,10 +95,12 @@ Item {
         nextTitle = ""; nextEpisodeId = 0
       }
 
+      currentAudio = null
       prevAudio = null
-      if (prevEpisodeId > 0) resolveAudio(prevEpisodeId, prevStartMs, prevTitle, function(a) {
-        prevAudio = a
-      })
+      if (currentEpisodeId > 0) resolveAudio(currentEpisodeId, currentStartMs, currentTitle,
+        function(a) { currentAudio = a })
+      if (prevEpisodeId > 0) resolveAudio(prevEpisodeId, prevStartMs, prevTitle,
+        function(a) { prevAudio = a })
 
       loaded()
       rescheduleRefresh()

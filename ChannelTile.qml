@@ -1,6 +1,5 @@
 import QtQuick
 import qs.Commons
-import qs.Ui
 
 // One channel button: Sveriges Radio's channel logo as a tile you press to
 // tune in. The logo artwork is a hard-edged colored square with a white
@@ -31,6 +30,12 @@ Item {
 
   readonly property bool active: playing || connecting
   readonly property bool hot: mouse.containsMouse || hasCursor
+  // The panel puts the full station name in its header while you hover, which
+  // is the only place "P4 Göteborg" is visible before you press it. A tooltip
+  // would be the obvious way to do that, but Qt Quick Controls' ToolTip is a
+  // Popup, and inside a layer-shell window it draws nothing while its overlay
+  // eats every click in the panel.
+  readonly property bool hovering: mouse.containsMouse
 
   signal activated()
 
@@ -124,11 +129,5 @@ Item {
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
     onClicked: root.activated()
-  }
-
-  PanelToolTip {
-    visible: mouse.containsMouse
-    text: root.label
-    fontFamily: root.fontFamily
   }
 }

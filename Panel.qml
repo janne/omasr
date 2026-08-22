@@ -39,7 +39,12 @@ Panel {
     ? (tintBarIcon ? playingColor : barForeground)
     : Qt.darker(barForeground, 1.5)
 
+  // Station name of whichever tile the pointer is over, so P4's region is
+  // visible before you commit to pressing it.
+  property string hoveredStation: ""
+
   readonly property string statusLine: {
+    if (hoveredStation !== "") return hoveredStation
     if (!player.available) return "mpv is not installed"
     if (player.status === "error") return player.lastError || "Playback failed"
     if (player.status === "connecting") return "Tuning in to " + player.station + "…"
@@ -56,20 +61,41 @@ Panel {
   // stepping back to a published programme keeps the channel identity.
   readonly property var playingTile: tileFor(player.channelKey)
 
-  // Step back to the previous programme, and back out of it again.
-  function playPreviousProgramme() {
-    var audio = schedule.prevAudio
+  // Play a published programme file on the tuned-in channel, keeping the
+  // channel identity so the tile stays lit and Direkt still returns to live.
+  function playProgramme(audio) {
     if (!audio || !playingTile) return
     player.playSource({
       key: playingTile.key,
       name: playingTile.name,
       station: playingTile.station,
+      programme: audio.title,
       url: audio.url,
       mode: "ondemand",
       originWallMs: audio.startMs,
       duration: audio.duration
     })
   }
+
+  function playPreviousProgramme() { playProgramme(schedule.prevAudio) }
+
+  // The back button: go to the beginning of the programme being heard, unless
+  // you are already within a few seconds of it, in which case go to the one
+  // before -- the convention every music player uses.
+  //
+  // On a live stream "the beginning" reaches only as far as the buffer, unless
+  // SR has published the programme as a file, in which case we switch to that
+  // and start it properly from the top.
+  function stepBack() {
+    if (!player.active) return
+    if (transport.atProgrammeStart && schedule.prevAudio) playPreviousProgramme()
+    else if (player.mode !== "ondemand" && schedule.currentAudio) playCurrentProgrammeFromStart()
+    else player.seekToStart()
+  }
+
+  // The current programme from its real start, where SR has published it --
+  // which reaches further back than the live buffer does.
+  function playCurrentProgrammeFromStart() { playProgramme(schedule.currentAudio) }
 
   function returnToLive() {
     if (playingTile) player.play(playingTile)
@@ -98,6 +124,7 @@ Panel {
   implicitHeight: button.implicitHeight
 
   onOpenedChanged: if (opened) {
+    hoveredStation = ""
     cursorActive = false
     // Park the cursor on whatever is playing, so Enter stops it.
     var playingIndex = indexOfKey(player.channelKey)
@@ -168,6 +195,21 @@ Panel {
       if (!schedule.prevAudio) return "no published previous programme"
       root.playPreviousProgramme()
       return "playing " + schedule.prevAudio.title
+    }
+    // Same rule the back button follows.
+    function stepBack(): string {
+      root.stepBack()
+      return player.mode === "ondemand"
+        ? "playing " + player.programme
+        : "rewound"
+    }
+    function fromStart(): string {
+      if (!schedule.currentAudio) {
+        player.seekToStart()
+        return "no published file; rewound to the start of the buffer"
+      }
+      root.playCurrentProgrammeFromStart()
+      return "playing " + schedule.currentAudio.title + " from the start"
     }
   }
 
@@ -288,6 +330,7 @@ Panel {
               connecting: player.channelKey === modelData.key && player.status === "connecting"
               backgrounded: player.active && player.channelKey !== modelData.key
               hasCursor: root.cursorActive && root.cursorIndex === index
+              onHoveringChanged: root.hoveredStation = hovering ? modelData.station : ""
               onActivated: {
                 root.cursorActive = false
                 root.cursorIndex = index
@@ -305,7 +348,9 @@ Panel {
           schedule: schedule
           foreground: root.foreground
           fontFamily: root.fontFamily
+          onStepBackRequested: root.stepBack()
           onPlayPrevious: root.playPreviousProgramme()
+          onPlayCurrentFromStart: root.playCurrentProgrammeFromStart()
           onReturnToCurrent: root.returnToLive()
         }
 
