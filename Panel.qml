@@ -97,8 +97,15 @@ Panel {
   // which reaches further back than the live buffer does.
   function playCurrentProgrammeFromStart() { playProgramme(schedule.currentAudio) }
 
+  // Back to the live broadcast, from wherever you are. Seeking to the live
+  // edge only works while a live stream is what is playing; a published
+  // programme has no live edge, so that case re-tunes the channel instead.
   function returnToLive() {
-    if (playingTile) player.play(playingTile)
+    if (player.mode === "ondemand") {
+      if (playingTile) player.play(playingTile)
+    } else {
+      player.goLive()
+    }
   }
 
   function indexOfKey(key) {
@@ -168,10 +175,14 @@ Panel {
     }
     function status(): string {
       if (!player.active) return "idle"
+      // `seek` reports whether the mpv control socket is live: when it is
+      // not, every transport control is correctly disabled, which looks like
+      // the panel has gone dead.
+      var seek = player.canSeek ? "seek" : "NOSEEK"
       var where = player.mode === "ondemand"
         ? "recorded"
         : (player.atLive ? "live" : "-" + Math.round(player.behindLiveSec) + "s")
-      return player.status + " " + player.station + " [" + where + "]"
+      return player.status + " " + player.station + " [" + where + " " + seek + "]"
     }
 
     // Transport, so the controls can be bound to Hyprland keys too.
@@ -189,7 +200,7 @@ Panel {
       player.seekRelative(Math.abs(n))
       return "ok"
     }
-    function live(): string { player.goLive(); return "live" }
+    function live(): string { root.returnToLive(); return "live" }
     function restart(): string { player.seekToStart(); return "ok" }
     function previous(): string {
       if (!schedule.prevAudio) return "no published previous programme"
@@ -284,7 +295,7 @@ Panel {
         } else if (t === ".") {
           player.seekRelative(15)
         } else if (t === "d" || t === "D") {
-          player.goLive()
+          root.returnToLive()
         } else if (t === "p" || t === "P") {
           player.togglePause()
         }

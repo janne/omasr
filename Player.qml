@@ -408,12 +408,15 @@ Item {
 
     function beginConnect() {
       ready = false
+      // Drop the previous child's connection before pointing at the new
+      // socket. Disconnecting is asynchronous, so `connected` can still be
+      // true for a moment afterwards -- which is why nothing below ever
+      // treats `connected` on its own as "usable".
+      sock.connected = false
       sock.path = socketPath
-      connectTimer.restart()
     }
 
     function teardown() {
-      connectTimer.stop()
       ready = false
       sock.connected = false
       sock.path = ""
@@ -462,25 +465,43 @@ Item {
 
   Socket {
     id: sock
-    onConnectedChanged: if (connected) ipc.onConnected()
+    // Only a connection to the socket we are currently interested in counts.
+    // A connection left over from the previous child reports `connected` too,
+    // and subscribing on that would leave us "ready" against a dead mpv.
+    onConnectedChanged: {
+      if (connected && path === ipc.socketPath && ipc.socketPath !== "") ipc.onConnected()
+      else if (!connected) ipc.ready = false
+    }
     parser: SplitParser {
       onRead: function(line) { ipc.handle(line) }
     }
   }
 
+  // Keeps trying until there is a usable control channel, and starts itself
+  // again if one is ever lost. Bound rather than started by hand: an earlier
+  // version stopped as soon as the socket reported `connected`, which a stale
+  // connection from the previous child satisfied instantly -- so the
+  // subscriptions were never placed, `ready` stayed false, and every
+  // transport control sat disabled and dimmed for the rest of the session.
   Timer {
     id: connectTimer
-    interval: 150
+    interval: connectTimer.attempts < 25 ? 200 : 1000
     repeat: true
-    running: false
-    // mpv has to get far enough into startup to bind the socket; keep trying
-    // until it does, and give up rather than spin forever if it never does.
+    running: proc.running && ipc.socketPath !== "" && !ipc.ready
     property int attempts: 0
     onRunningChanged: if (running) attempts = 0
     onTriggered: {
-      if (sock.connected) { stop(); return }
-      if (++attempts > 60) { stop(); return }
-      if (ipc.socketPath !== "") sock.connected = true
+      attempts++
+      if (sock.connected) {
+        // Connected, but not ready. Either this is the right socket and we
+        // missed the change signal, or it is the previous child's and has to
+        // go before we can reach the new one.
+        if (sock.path === ipc.socketPath) ipc.onConnected()
+        else sock.connected = false
+        return
+      }
+      sock.path = ipc.socketPath
+      sock.connected = true
     }
   }
 

@@ -99,7 +99,7 @@ omarchy-shell omasr toggle         # show/hide the panel
 omarchy-shell omasr pause          # play/pause
 omarchy-shell omasr back 30        # seconds, default 15
 omarchy-shell omasr forward 30
-omarchy-shell omasr live           # back to the live edge
+omarchy-shell omasr live           # back to the live broadcast
 omarchy-shell omasr stepBack       # what the |< button does
 omarchy-shell omasr fromStart      # the current programme from its start
 omarchy-shell omasr restart        # to the start of the buffer
@@ -147,6 +147,15 @@ overlay quietly swallows every click in the panel. A tooltip on the channel
 tiles is what first showed this up: it never appeared, and once the pointer
 had been over a tile the panel stopped responding. Anything popup-shaped here
 has to be a plain item in the scene instead.
+
+**The control socket.** Every transport control depends on mpv's IPC socket
+being live, so when it is not, all of them correctly disable at once -- which
+looks exactly like the panel having gone dead. The retry loop is therefore
+bound to "there is a child and no usable channel" rather than started and
+stopped by hand, so it re-arms itself if a connection is ever lost, and a
+connection is only treated as usable once the property subscriptions are
+actually on it. `omarchy-shell omasr status` reports `seek` or `NOSEEK` so
+this is visible rather than guessed at.
 
 **Seeking.** mpv runs with a JSON IPC socket. Rather than polling it, the
 player asks mpv to push the properties the transport needs (`time-pos`,

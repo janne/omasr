@@ -161,10 +161,7 @@ Item {
         hoverEnabled: true
         enabled: !root.isLive && root.ready
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: {
-          if (root.onDemand) root.returnToCurrent()
-          else if (root.player) root.player.goLive()
-        }
+        onClicked: root.returnToCurrent()
       }
     }
 
@@ -244,10 +241,7 @@ Item {
         foreground: root.foreground
         fontFamily: root.fontFamily
         glyphSize: Style.space(15)
-        onActivated: {
-          if (root.onDemand) root.returnToCurrent()
-          else if (root.player) root.player.goLive()
-        }
+        onActivated: root.returnToCurrent()
       }
     }
   }
