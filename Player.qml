@@ -241,8 +241,8 @@ Item {
     Quickshell.execDetached(["rm", "-f", path])
   }
 
-  function _resetTransport() {
-    timePos = 0
+  function _resetTransport(startAtSec) {
+    timePos = Number(startAtSec) || 0
     cacheEnd = 0
     cacheBegin = 0
     duration = 0
@@ -271,7 +271,7 @@ Item {
     mode = source.mode || "live"
     timeShifted = false
     _source = source
-    _resetTransport()
+    _resetTransport(source.startAtSec)
 
     // A previous child is still shutting down; hand off to onExited.
     if (proc.running) {
@@ -295,6 +295,7 @@ Item {
     // Position 0 of a live stream is the moment we connect.
     originWallMs = mode === "live" ? Date.now() : (_source.originWallMs || Date.now())
     if (mode === "ondemand") duration = _source.duration || 0
+    var startAt = Number(_source.startAtSec) || 0
 
     proc.command = [
       "mpv", _source.url,
@@ -313,6 +314,9 @@ Item {
       "--demuxer-max-back-bytes=" + backCache,
       "--input-ipc-server=" + socketPath
     ]
+    // Seeking after playback starts would be audible as a stutter, so let mpv
+    // open the file at the right place instead.
+    if (startAt > 0) proc.command = proc.command.concat(["--start=" + startAt.toFixed(2)])
     ipc.socketPath = socketPath
     proc.running = true
     ipc.beginConnect()

@@ -60,12 +60,24 @@ Item {
   readonly property bool canStepForward: ready && (onDemand || !isLive)
   readonly property bool canForward15: ready && !isLive && player.behindLiveSec > 1.5
   // Nothing behind the playhead means the button would silently do nothing,
-  // so dim it rather than let it look broken.
-  readonly property bool canBack15: ready && player.seekableBackSec > 1.5
+  // so dim it rather than let it look broken. How far back "behind" reaches
+  // depends on whether the programme can be switched to as a file.
+  readonly property bool canBack15: ready && (fullySeekable
+    ? player.playheadWallMs > windowStartMs + 1500
+    : player.seekableBackSec > 1.5)
 
   signal stepBackRequested()
   signal playCurrentFromStart()
   signal returnToCurrent()
+  // Seeking goes through the panel, which decides between moving inside the
+  // live buffer and switching to the published programme.
+  signal seekRequested(double wallMs)
+  signal seekByRequested(int seconds)
+
+  // True when the whole broadcast window can be reached, because a published
+  // file is playing or one exists to switch to. Otherwise only what the live
+  // buffer holds is reachable.
+  property bool fullySeekable: false
 
   // Where "the beginning of this programme" actually lands. A published file
   // starts at the programme's real start; a live stream can only go back as
@@ -179,12 +191,16 @@ Item {
       endMs: root.windowEndMs
       playheadMs: root.player ? root.player.playheadWallMs : 0
       liveMs: root.player ? root.player.liveWallMs : 0
-      seekableFromMs: root.player ? root.player.seekableStartWallMs : 0
+      // With a published file to fall back on, the whole programme is
+      // reachable, not just the part we happen to have buffered.
+      seekableFromMs: root.fullySeekable
+        ? root.windowStartMs
+        : (root.player ? root.player.seekableStartWallMs : 0)
       // The live marker only means something while a live stream is running;
       // a recorded programme has an end, not a live edge.
       timeShifted: !root.isLive && !root.onDemand
 
-      onSeekRequested: function(wallMs) { if (root.player) root.player.seekToWall(wallMs) }
+      onSeekRequested: function(wallMs) { root.seekRequested(wallMs) }
     }
 
     // --- buttons -----------------------------------------------------------
@@ -210,7 +226,7 @@ Item {
         actionEnabled: root.canBack15
         foreground: root.foreground
         fontFamily: root.fontFamily
-        onActivated: if (root.player) root.player.seekRelative(-15)
+        onActivated: root.seekByRequested(-15)
       }
 
       TransportButton {
@@ -231,7 +247,7 @@ Item {
         actionEnabled: root.canForward15
         foreground: root.foreground
         fontFamily: root.fontFamily
-        onActivated: if (root.player) root.player.seekRelative(15)
+        onActivated: root.seekByRequested(15)
       }
 
       TransportButton {

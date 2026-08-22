@@ -18,9 +18,9 @@ Once something is playing, the transport appears.
 - **Direkt** — a lit red lamp means you are on the live edge. Step back and it
   becomes a button that returns you there.
 - **The timeline** spans the programme currently being heard, labelled with its
-  broadcast start and end. The bright section is what is in the buffer and can
-  be scrubbed; a second, dimmer marker shows where live has got to once you are
-  behind it. Click or drag anywhere in it to seek.
+  broadcast start and end. Click or drag anywhere in it to seek. The bright
+  section is what can actually be reached; a second, dimmer marker shows where
+  live has got to once you are behind it.
 - **↺ 15 / ↻ 15** jump a quarter minute either way. Each is dimmed when there
   is nothing to move towards: forward while you are live, back once you reach
   the start of the buffer or of a programme.
@@ -40,21 +40,24 @@ named `hls/<id>.m3u8` both resolve to a plain ICY stream with no DVR window.
 What makes rewinding work is mpv's own demuxer back-cache: it can seek back
 through everything it has already received.
 
-So **the rewindable window is everything since you tuned in**, not the whole
-programme. Tune in at 10:30 to a programme that started at 10:03 and the first
-27 minutes are not reachable from the buffer — the timeline shows this, with
-the bright scrubbable section starting where your buffer does. Pausing counts
-as stepping back: the broadcast carries on without you, and resuming picks up
-where you stopped.
+So the live stream alone can only be scrubbed within **what has been received
+since you tuned in**, usually the last few minutes. Pausing counts as stepping
+back: the broadcast carries on without you, and resuming picks up where you
+stopped.
 
-Published files fill in the rest. SR publishes many programmes as a file, and
-where one exists **|◀** switches to it and plays the programme from its real
-start, with ordinary seeking throughout — so you are not limited to the buffer
-after all. This is common for produced programmes, which are often published
-while still on air, and uncommon for live desks like the news, which generally
-have nothing until they finish. The same applies to the previous programme.
-When SR has published nothing, **|◀** falls back to the start of the buffer,
-which is the furthest back that actually exists.
+Published files make up the difference. SR publishes many programmes as a file,
+often while they are still on air, and where one exists the player **switches
+to it the moment you ask for something the buffer does not hold** — scrubbing
+to an earlier point on the timeline, or pressing back past the oldest thing
+buffered. It opens the file at the moment you asked for, so the handoff is just
+a jump, and from there the whole broadcast window seeks normally. Pressing
+**Direkt** goes back to the live feed.
+
+That means the timeline is fully scrubbable for a published programme and only
+buffer-deep for one SR has not published — live desks like the news generally
+have nothing until they finish. The bright section of the bar shows which case
+you are in, and the back controls dim when there is genuinely nothing behind
+the playhead.
 
 ## Install
 
@@ -128,6 +131,11 @@ omarchy-shell omasr previous       # step back one programme
 and bitrate SR is currently serving, so there is nothing here to keep in sync
 when they move things around. The timeline comes from
 `scheduledepisodes/rightnow` on the same API.
+
+**Switching to a file.** The handoff uses mpv's `--start`, so the file opens at
+the right moment rather than opening at zero and seeking afterwards, which
+would be audible. `omarchy-shell omasr status` reports the playhead as a clock
+time, so it can be followed across a handoff.
 
 **Walking back.** Stepping back repeatedly needs the schedule *around the
 programme being heard*, not around the live one — otherwise every press finds

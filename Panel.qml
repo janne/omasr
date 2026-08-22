@@ -63,7 +63,7 @@ Panel {
 
   // Play a published programme file on the tuned-in channel, keeping the
   // channel identity so the tile stays lit and Direkt still returns to live.
-  function playProgramme(audio) {
+  function playProgramme(audio, atSec) {
     if (!audio || !playingTile) return
     player.playSource({
       key: playingTile.key,
@@ -73,8 +73,44 @@ Panel {
       url: audio.url,
       mode: "ondemand",
       originWallMs: audio.startMs,
-      duration: audio.duration
+      duration: audio.duration,
+      startAtSec: Math.max(0, Number(atSec) || 0)
     })
+  }
+
+  // Moving about inside the programme.
+  //
+  // A live stream can only be scrubbed within what has actually been received,
+  // which is usually just the last few minutes. Asking for anything older used
+  // to clamp silently, so the timeline looked dead and a second press of
+  // back-15 appeared to do nothing. Where SR has published the programme, we
+  // switch to that file at the requested moment instead -- the same move the
+  // back button makes for an earlier programme, and what makes the whole
+  // broadcast window reachable rather than only the buffer.
+  readonly property bool programmeFullySeekable: player.mode === "ondemand"
+    || !!schedule.currentAudio
+
+  function seekToWall(wallMs) {
+    if (!player.active) return
+    if (player.mode === "ondemand" || wallMs >= player.seekableStartWallMs - 500) {
+      player.seekToWall(wallMs)
+      return
+    }
+    var audio = schedule.currentAudio
+    if (audio) playProgramme(audio, (wallMs - audio.startMs) / 1000)
+    else player.seekToWall(wallMs)   // clamps to the oldest buffered moment
+  }
+
+  function seekBy(seconds) {
+    if (!player.active) return
+    if (seconds > 0 || player.mode === "ondemand") {
+      player.seekRelative(seconds)
+      return
+    }
+    // Going back past what the buffer holds: hand off to the published file.
+    var target = player.playheadWallMs + seconds * 1000
+    if (target >= player.seekableStartWallMs) player.seekRelative(seconds)
+    else seekToWall(target)
   }
 
   // The back button: go to the beginning of the programme being heard, unless
@@ -107,7 +143,7 @@ Panel {
 
   // The current programme from its real start, where SR has published it --
   // which reaches further back than the live buffer does.
-  function playCurrentProgrammeFromStart() { playProgramme(schedule.currentAudio) }
+  function playCurrentProgrammeFromStart() { playProgramme(schedule.currentAudio, 0) }
 
   // Back to the live broadcast, from wherever you are. Seeking to the live
   // edge only works while a live stream is what is playing; a published
@@ -194,7 +230,12 @@ Panel {
       var where = player.mode === "ondemand"
         ? "recorded"
         : (player.atLive ? "live" : "-" + Math.round(player.behindLiveSec) + "s")
-      return player.status + " " + player.station + " [" + where + " " + seek + "]"
+      // The playhead as a clock time, which is what the timeline shows and is
+      // comparable across live and published playback.
+      var at = player.playheadWallMs > 0
+        ? Qt.formatDateTime(new Date(player.playheadWallMs), "HH:mm:ss") : "--:--:--"
+      return player.status + " " + player.station
+        + " [" + where + " " + seek + " at " + at + "]"
     }
 
     // Transport, so the controls can be bound to Hyprland keys too.
@@ -203,13 +244,11 @@ Panel {
       return player.paused ? "paused" : "playing"
     }
     function back(seconds: string): string {
-      var n = Number(seconds) || 15
-      player.seekRelative(-Math.abs(n))
+      root.seekBy(-Math.abs(Number(seconds) || 15))
       return "ok"
     }
     function forward(seconds: string): string {
-      var n = Number(seconds) || 15
-      player.seekRelative(Math.abs(n))
+      root.seekBy(Math.abs(Number(seconds) || 15))
       return "ok"
     }
     function live(): string { root.returnToLive(); return "live" }
@@ -302,9 +341,9 @@ Panel {
         } else if (t === "s" || t === "S") {
           player.stop()
         } else if (t === ",") {
-          player.seekRelative(-15)
+          root.seekBy(-15)
         } else if (t === ".") {
-          player.seekRelative(15)
+          root.seekBy(15)
         } else if (t === "d" || t === "D") {
           root.returnToLive()
         } else if (t === "p" || t === "P") {
@@ -370,6 +409,9 @@ Panel {
           schedule: schedule
           foreground: root.foreground
           fontFamily: root.fontFamily
+          fullySeekable: root.programmeFullySeekable
+          onSeekRequested: function(wallMs) { root.seekToWall(wallMs) }
+          onSeekByRequested: function(seconds) { root.seekBy(seconds) }
           onStepBackRequested: root.stepBack()
           onPlayCurrentFromStart: root.playCurrentProgrammeFromStart()
           onReturnToCurrent: root.returnToLive()
