@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "id": "omasr.radio",
+  "name": "Sveriges Radio",
+  "version": "1.0.0",
+  "author": "Jan Andersson",
+  "license": "MIT",
+  "description": "Sveriges Radio P1-P4 in the Omarchy bar. Press a channel to tune in, press it again to stop.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Sveriges Radio",
+    "description": "Live radio: P1, P2, P3 and P4 as one-press channel buttons.",
+    "category": "Media",
+    "aliases": [
+      "sr",
+      "radio",
+      "sverigesradio",
+      "p1",
+      "p2",
+      "p3",
+      "p4"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {
+      "p4Region": "P4 Stockholm",
+      "barIcon": "Channel color"
+    },
+    "schema": [
+      {
+        "key": "p4Region",
+        "type": "enum",
+        "label": "P4 station",
+        "options": [
+          "P4 Blekinge",
+          "P4 Dalarna",
+          "P4 Gotland",
+          "P4 Gävleborg",
+          "P4 Göteborg",
+          "P4 Halland",
+          "P4 Jämtland",
+          "P4 Jönköping",
+          "P4 Kalmar",
+          "P4 Kristianstad",
+          "P4 Kronoberg",
+          "P4 Malmöhus",
+          "P4 Norrbotten",
+          "P4 Sjuhärad",
+          "P4 Skaraborg",
+          "P4 Stockholm",
+          "P4 Södertälje",
+          "P4 Sörmland",
+          "P4 Uppland",
+          "P4 Värmland",
+          "P4 Väst",
+          "P4 Västerbotten",
+          "P4 Västernorrland",
+          "P4 Västmanland",
+          "P4 Örebro",
+          "P4 Östergötland"
+        ],
+        "defaultValue": "P4 Stockholm",
+        "description": "P4 is regional. This picks which regional station the P4 button tunes to."
+      },
+      {
+        "key": "barIcon",
+        "type": "enum",
+        "label": "Bar icon while playing",
+        "options": [
+          "Channel color",
+          "Theme foreground"
+        ],
+        "defaultValue": "Channel color",
+        "description": "Tint the SR monogram with the playing channel's brand color, or keep it in the bar's own color."
+      }
+    ]
+  }
+}
