@@ -50,6 +50,15 @@ Item {
     if (!schedule) return 0
     return inPreviousProgramme ? playheadEpisode.endMs : schedule.currentEndMs
   }
+  // Artwork for the programme being heard. The day schedule carries one per
+  // entry; `rightnow` is the fallback for the programme on air, whose entry
+  // the day list can lag behind over a rollover.
+  readonly property string programmeImage: {
+    if (playheadEpisode && playheadEpisode.imageUrl) return playheadEpisode.imageUrl
+    if (!inPreviousProgramme && schedule) return schedule.currentImage
+    return ""
+  }
+
   // The programme actually being heard.
   readonly property string programmeTitle: {
     if (onDemand) return player ? player.programme : ""

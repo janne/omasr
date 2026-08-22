@@ -595,29 +595,73 @@ Panel {
           onReturnToCurrent: root.returnToLive()
         }
 
-        // Whatever SR is announcing over the stream right now, when it sends
-        // it. Reserves no space when the stream is silent about it.
-        Text {
+        // The programme being heard: its name, whatever SR is announcing over
+        // the stream, and its cover art. Reserves no space when there is
+        // nothing to say.
+        Column {
+          id: caption
           width: parent.width
+          spacing: Style.space(7)
           visible: player.status === "playing"
-            && (player.nowPlaying !== "" || transport.programmeTitle !== "")
-          text: {
-            var show = transport.programmeTitle
-            var icy = player.nowPlaying
-            if (show === "") return icy
-            if (icy === "" || icy === show) return show
-            // SR often repeats the programme name in the ICY title; only add
-            // it when it is actually saying something else.
-            if (icy.indexOf(show) === 0) return icy
-            return show + " · " + icy
+
+          Text {
+            id: captionTitle
+            width: parent.width
+            text: transport.programmeTitle
+            visible: text !== ""
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
           }
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          horizontalAlignment: Text.AlignHCenter
-          elide: Text.ElideRight
-          maximumLineCount: 2
-          wrapMode: Text.WordWrap
+
+          Text {
+            id: captionNow
+            width: parent.width
+            // Only when it says something the programme name does not.
+            text: {
+              var icy = player.nowPlaying
+              var show = transport.programmeTitle
+              if (icy === "" || icy === show) return ""
+              if (show !== "" && icy.indexOf(show) === 0)
+                return icy.substring(show.length).replace(/^[\s,\u00b7-]+/, "")
+              return icy
+            }
+            visible: text !== ""
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            maximumLineCount: 2
+            wrapMode: Text.WordWrap
+          }
+
+          // Cover art across the panel. SR's artwork is square; it is cropped
+          // to a band rather than shown at full height, which on a panel this
+          // wide would be taller than everything above it put together.
+          Rectangle {
+            id: cover
+            width: parent.width
+            height: Math.min(width, Style.space(150))
+            visible: transport.programmeImage !== "" && coverImage.status === Image.Ready
+            radius: Math.max(Style.space(3), Style.cornerRadius)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+            clip: true
+
+            Image {
+              id: coverImage
+              anchors.fill: parent
+              source: transport.programmeImage
+              // Loaded off the render thread, and kept so a rollover between
+              // programmes does not blink.
+              asynchronous: true
+              cache: true
+              fillMode: Image.PreserveAspectCrop
+              sourceSize.width: cover.width * 2
+            }
+          }
         }
       }
     }

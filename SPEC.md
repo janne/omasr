@@ -99,6 +99,14 @@ a recording, and both have something ahead of them.
 - Already inside the on-air programme → joins the live broadcast.
 - A programme playing out to its end advances the same way on its own.
 
+### Cover art and captions
+
+While playing, the panel names the programme being heard and shows its cover
+art beneath. A second line carries what SR is announcing over the stream, but
+only when it says something the programme name does not. All three follow the
+*playhead*, so stepping back through programmes changes them; a programme SR
+has no art for simply shows none.
+
 ### Play / pause
 
 Pauses. On a live stream this is itself a time shift: the broadcast carries on

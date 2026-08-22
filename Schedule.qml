@@ -18,6 +18,10 @@ Item {
   property int channelId: 0
 
   property string currentTitle: ""
+  // Programme artwork. SR serves it at one preset, which the API already
+  // spells out in the URLs it hands back; roughly nine programmes in ten
+  // have one.
+  property string currentImage: ""
   property string currentProgram: ""
   property double currentStartMs: 0
   property double currentEndMs: 0
@@ -60,6 +64,7 @@ Item {
 
   function clear() {
     currentTitle = ""; currentProgram = ""; currentStartMs = 0; currentEndMs = 0; currentEpisodeId = 0
+    currentImage = ""
     currentAudio = null
     prevTitle = ""; prevEpisodeId = 0; prevStartMs = 0; prevEndMs = 0
     nextTitle = ""; nextEpisodeId = 0; nextStartMs = 0
@@ -113,6 +118,7 @@ Item {
         merged.push({
           id: list[i].episodeid || 0,
           title: list[i].title || "",
+          imageUrl: list[i].imageurl || "",
           startMs: parseDate(list[i].starttimeutc),
           endMs: parseDate(list[i].endtimeutc)
         })
@@ -140,6 +146,7 @@ Item {
       var nxt = ch.nextscheduledepisode
 
       if (cur) {
+        currentImage = cur.socialimage || ""
         currentTitle = cur.title || ""
         currentProgram = (cur.program && cur.program.name) || ""
         currentStartMs = parseDate(cur.starttimeutc)

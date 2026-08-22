@@ -223,8 +223,13 @@ allocation, so it grows with how long you have been listening: roughly another
 **Dropouts.** Live streams drop. An unexpected exit reconnects up to three
 times, 1.5s apart, before the panel gives up and reports the failure.
 
-**Now playing.** When SR sends ICY metadata on the stream, the current
-programme and track are shown under the tiles.
+**Now playing.** Under the controls: the programme being heard, whatever SR is
+announcing over the stream when that says something the programme name does
+not, and the programme's cover art. The art comes from the schedule
+(`imageurl`, with `rightnow`'s `socialimage` as the fallback over a rollover);
+about nine programmes in ten have one. SR serves it square and the panel crops
+it to a band, since at full height it would be taller than everything above it
+put together.
 
 ## Checking it still works
 
