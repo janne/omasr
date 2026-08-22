@@ -484,6 +484,16 @@ Item {
     }
   }
 
+  // Sweep stale IPC sockets left by a shell that was killed rather than shut
+  // down: mpv unlinks its own socket on a clean exit, but the shell takes its
+  // children with it when it goes, so nothing gets the chance. Safe at
+  // startup precisely because no mpv of ours can still be running.
+  Process {
+    running: true
+    command: ["sh", "-c",
+      "rm -f \"${XDG_RUNTIME_DIR:-/tmp}\"/omasr-mpv-*.sock"]
+  }
+
   // One-shot probe so the panel can say "mpv isn't installed" rather than
   // appearing broken.
   Process {
