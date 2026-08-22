@@ -52,6 +52,29 @@ Panel {
     return null
   }
 
+  // The tile currently tuned in, whatever the player is actually decoding --
+  // stepping back to a published programme keeps the channel identity.
+  readonly property var playingTile: tileFor(player.channelKey)
+
+  // Step back to the previous programme, and back out of it again.
+  function playPreviousProgramme() {
+    var audio = schedule.prevAudio
+    if (!audio || !playingTile) return
+    player.playSource({
+      key: playingTile.key,
+      name: playingTile.name,
+      station: playingTile.station,
+      url: audio.url,
+      mode: "ondemand",
+      originWallMs: audio.startMs,
+      duration: audio.duration
+    })
+  }
+
+  function returnToLive() {
+    if (playingTile) player.play(playingTile)
+  }
+
   function indexOfKey(key) {
     for (var i = 0; i < tiles.length; i++) if (tiles[i].key === key) return i
     return -1
@@ -87,6 +110,11 @@ Panel {
     clientName: "Sveriges Radio"
   }
 
+  Schedule {
+    id: schedule
+    channelId: root.playingTile ? root.playingTile.id : 0
+  }
+
   IpcHandler {
     target: root.ipcTarget
 
@@ -112,7 +140,34 @@ Panel {
       return player.active ? "playing " + player.station : "stopped"
     }
     function status(): string {
-      return player.active ? player.status + " " + player.station : "idle"
+      if (!player.active) return "idle"
+      var where = player.mode === "ondemand"
+        ? "recorded"
+        : (player.atLive ? "live" : "-" + Math.round(player.behindLiveSec) + "s")
+      return player.status + " " + player.station + " [" + where + "]"
+    }
+
+    // Transport, so the controls can be bound to Hyprland keys too.
+    function pause(): string {
+      player.togglePause()
+      return player.paused ? "paused" : "playing"
+    }
+    function back(seconds: string): string {
+      var n = Number(seconds) || 15
+      player.seekRelative(-Math.abs(n))
+      return "ok"
+    }
+    function forward(seconds: string): string {
+      var n = Number(seconds) || 15
+      player.seekRelative(Math.abs(n))
+      return "ok"
+    }
+    function live(): string { player.goLive(); return "live" }
+    function restart(): string { player.seekToStart(); return "ok" }
+    function previous(): string {
+      if (!schedule.prevAudio) return "no published previous programme"
+      root.playPreviousProgramme()
+      return "playing " + schedule.prevAudio.title
     }
   }
 
@@ -156,7 +211,8 @@ Panel {
     // fittedContentHeight, KeyboardPanel adds no horizontal inset of its own.
     // Size to the tile row, which is always the widest thing in the panel, and
     // leave room for the ring an active tile draws outside its own bounds.
-    contentWidth: panel.fittedContentWidth(tileRow.implicitWidth
+    contentWidth: panel.fittedContentWidth(Math.max(tileRow.implicitWidth,
+        player.active ? Style.space(268) : 0)
       + panel.padding * 2
       + Border.left(panel.borderSpec) + Border.right(panel.borderSpec)
       + Style.space(8))
@@ -181,6 +237,14 @@ Panel {
           root.activate(n - 1)
         } else if (t === "s" || t === "S") {
           player.stop()
+        } else if (t === ",") {
+          player.seekRelative(-15)
+        } else if (t === ".") {
+          player.seekRelative(15)
+        } else if (t === "d" || t === "D") {
+          player.goLive()
+        } else if (t === "p" || t === "P") {
+          player.togglePause()
         }
       }
 
@@ -233,12 +297,34 @@ Panel {
           }
         }
 
+        Transport {
+          id: transport
+          width: parent.width
+          visible: player.active && player.status !== "error"
+          player: player
+          schedule: schedule
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onPlayPrevious: root.playPreviousProgramme()
+          onReturnToCurrent: root.returnToLive()
+        }
+
         // Whatever SR is announcing over the stream right now, when it sends
         // it. Reserves no space when the stream is silent about it.
         Text {
           width: parent.width
-          visible: player.nowPlaying !== "" && player.status === "playing"
-          text: player.nowPlaying
+          visible: player.status === "playing"
+            && (player.nowPlaying !== "" || transport.programmeTitle !== "")
+          text: {
+            var show = transport.programmeTitle
+            var icy = player.nowPlaying
+            if (show === "") return icy
+            if (icy === "" || icy === show) return show
+            // SR often repeats the programme name in the ICY title; only add
+            // it when it is actually saying something else.
+            if (icy.indexOf(show) === 0) return icy
+            return show + " · " + icy
+          }
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall

@@ -1,0 +1,152 @@
+import QtQuick
+
+// What is on the air right now, from SR's open API.
+//
+// `scheduledepisodes/rightnow` returns the previous, current and next
+// scheduled episode for a channel, each with UTC start and end times. That is
+// what gives the transport its timeline: the bar spans the current
+// programme's broadcast window, and the labels at either end are its start
+// and end clock times.
+//
+// Episode audio is a separate lookup. A programme that has already aired
+// usually has a published file (`listenpodfile`), which is what makes
+// "previous programme" playable; one that is still airing usually does not,
+// so the transport dims that button rather than offering a dead control.
+Item {
+  id: root
+
+  property int channelId: 0
+
+  property string currentTitle: ""
+  property string currentProgram: ""
+  property double currentStartMs: 0
+  property double currentEndMs: 0
+  property int currentEpisodeId: 0
+
+  property string prevTitle: ""
+  property int prevEpisodeId: 0
+  property double prevStartMs: 0
+  property double prevEndMs: 0
+
+  property string nextTitle: ""
+  property int nextEpisodeId: 0
+  property double nextStartMs: 0
+
+  // Resolved on-demand audio for the previous programme, when SR has
+  // published it: { url, duration, startMs, title }.
+  property var prevAudio: null
+
+  readonly property bool valid: currentEndMs > 0
+
+  signal loaded()
+
+  // SR serializes times as "/Date(1787385780000)/".
+  function parseDate(value) {
+    var m = String(value || "").match(/\/Date\((-?\d+)/)
+    return m ? Number(m[1]) : 0
+  }
+
+  function clear() {
+    currentTitle = ""; currentProgram = ""; currentStartMs = 0; currentEndMs = 0; currentEpisodeId = 0
+    prevTitle = ""; prevEpisodeId = 0; prevStartMs = 0; prevEndMs = 0
+    nextTitle = ""; nextEpisodeId = 0; nextStartMs = 0
+    prevAudio = null
+  }
+
+  function refresh() {
+    if (channelId <= 0) { clear(); return }
+    var url = "https://api.sr.se/api/v2/scheduledepisodes/rightnow?channelid="
+      + channelId + "&format=json"
+    getJson(url, function(data) {
+      var ch = data && data.channel
+      if (!ch) return
+      var cur = ch.currentscheduledepisode
+      var prev = ch.previousscheduledepisode
+      var nxt = ch.nextscheduledepisode
+
+      if (cur) {
+        currentTitle = cur.title || ""
+        currentProgram = (cur.program && cur.program.name) || ""
+        currentStartMs = parseDate(cur.starttimeutc)
+        currentEndMs = parseDate(cur.endtimeutc)
+        currentEpisodeId = cur.episodeid || 0
+      }
+      if (prev) {
+        prevTitle = prev.title || ""
+        prevEpisodeId = prev.episodeid || 0
+        prevStartMs = parseDate(prev.starttimeutc)
+        prevEndMs = parseDate(prev.endtimeutc)
+      } else {
+        prevTitle = ""; prevEpisodeId = 0
+      }
+      if (nxt) {
+        nextTitle = nxt.title || ""
+        nextEpisodeId = nxt.episodeid || 0
+        nextStartMs = parseDate(nxt.starttimeutc)
+      } else {
+        nextTitle = ""; nextEpisodeId = 0
+      }
+
+      prevAudio = null
+      if (prevEpisodeId > 0) resolveAudio(prevEpisodeId, prevStartMs, prevTitle, function(a) {
+        prevAudio = a
+      })
+
+      loaded()
+      rescheduleRefresh()
+    })
+  }
+
+  // Look up a published file for an episode. Calls back with null when SR has
+  // nothing for it, which is the normal case for a programme still on air.
+  function resolveAudio(episodeId, startMs, title, callback) {
+    getJson("https://api.sr.se/api/v2/episodes/get?id=" + episodeId + "&format=json",
+      function(data) {
+        var ep = data && data.episode
+        var file = ep && (ep.listenpodfile || ep.broadcast)
+        var url = file && (file.url || (file.broadcastfiles && file.broadcastfiles.length
+          ? file.broadcastfiles[0].url : ""))
+        if (!url) { callback(null); return }
+        callback({
+          url: url,
+          duration: Number(file.duration || (file.broadcastfiles && file.broadcastfiles[0]
+            ? file.broadcastfiles[0].duration : 0)) || 0,
+          startMs: startMs,
+          title: title
+        })
+      })
+  }
+
+  function getJson(url, callback) {
+    var xhr = new XMLHttpRequest()
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== XMLHttpRequest.DONE) return
+      if (xhr.status < 200 || xhr.status >= 300) return
+      try { callback(JSON.parse(xhr.responseText)) } catch (e) { /* stale/garbled */ }
+    }
+    xhr.open("GET", url)
+    xhr.send()
+  }
+
+  // Re-fetch shortly after the current programme is due to end, so the
+  // timeline rolls over on its own, with a slow poll as the safety net for a
+  // schedule that shifts under us.
+  function rescheduleRefresh() {
+    var untilEnd = currentEndMs - Date.now()
+    rolloverTimer.interval = untilEnd > 0
+      ? Math.min(untilEnd + 2000, 15 * 60 * 1000)
+      : 30 * 1000
+    rolloverTimer.restart()
+  }
+
+  onChannelIdChanged: {
+    clear()
+    refresh()
+  }
+
+  Timer {
+    id: rolloverTimer
+    repeat: false
+    onTriggered: root.refresh()
+  }
+}
