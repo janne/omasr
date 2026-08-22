@@ -225,11 +225,15 @@ times, 1.5s apart, before the panel gives up and reports the failure.
 
 **Now playing.** Under the controls: the programme being heard, whatever SR is
 announcing over the stream when that says something the programme name does
-not, and the programme's cover art. The art comes from the schedule
-(`imageurl`, with `rightnow`'s `socialimage` as the fallback over a rollover);
-about nine programmes in ten have one. SR serves it square and the panel crops
-it to a band, since at full height it would be taller than everything above it
-put together.
+not, and the programme's cover art, shown whole at its own proportions.
+
+The artwork needs two turns of the API. Every image URL it hands back carries
+`?preset=api-default-square`, which crops SR's 16:9 artwork to a square;
+asking for the same template *without* a preset gives the picture as composed,
+which is what SR's own apps show. And a schedule entry does not always carry
+an image — USApodden is one that does not — but every programme does, as
+`programimagetemplatewide`, so entries missing one are filled in from their
+programme once the day's schedule lands.
 
 ## Checking it still works
 

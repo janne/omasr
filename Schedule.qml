@@ -18,10 +18,21 @@ Item {
   property int channelId: 0
 
   property string currentTitle: ""
-  // Programme artwork. SR serves it at one preset, which the API already
-  // spells out in the URLs it hands back; roughly nine programmes in ten
-  // have one.
+  // Programme artwork, as the wide image SR composes for it.
+  //
+  // The URLs the API hands back carry `?preset=api-default-square`, which
+  // crops the artwork to a square; the underlying asset is 16:9. Asking for
+  // the template without a preset gives that, which is what SR's own apps
+  // show. `imageTemplate` fields throughout are therefore preset-free.
   property string currentImage: ""
+
+  // programId -> wide artwork, for programmes whose schedule entry carries no
+  // image of its own. Every programme has one.
+  property var programImages: ({})
+
+  function bareTemplate(url) {
+    return String(url || "").split("?")[0]
+  }
   property string currentProgram: ""
   property double currentStartMs: 0
   property double currentEndMs: 0
@@ -118,7 +129,8 @@ Item {
         merged.push({
           id: list[i].episodeid || 0,
           title: list[i].title || "",
-          imageUrl: list[i].imageurl || "",
+          imageUrl: bareTemplate(list[i].imageurltemplate || list[i].imageurl),
+          programId: (list[i].program && list[i].program.id) || 0,
           startMs: parseDate(list[i].starttimeutc),
           endMs: parseDate(list[i].endtimeutc)
         })
@@ -126,12 +138,52 @@ Item {
       if (--pending === 0) {
         merged.sort(function(a, b) { return a.startMs - b.startMs })
         daySchedule = merged
+        fillMissingArtwork(merged)
       }
     }
     var base = "https://api.sr.se/api/v2/scheduledepisodes?channelid=" + channelId
       + "&format=json&pagination=false&date="
     getJson(base + dateStamp(-1), absorb)
     getJson(base + dateStamp(0), absorb)
+  }
+
+  // Some entries carry no image; their programme always does. Looked up once
+  // per programme after the day lands, rather than on demand from a binding.
+  function fillMissingArtwork(entries) {
+    var wanted = {}
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i]
+      if (e.imageUrl === "" && e.programId > 0 && programImages[e.programId] === undefined)
+        wanted[e.programId] = true
+    }
+    for (var id in wanted) rememberProgrammeImage(Number(id))
+  }
+
+  function rememberProgrammeImage(programId) {
+    // Claim it first, so a second pass does not fetch it again.
+    var pending = {}
+    for (var k in programImages) pending[k] = programImages[k]
+    pending[programId] = ""
+    programImages = pending
+
+    getJson("https://api.sr.se/api/v2/programs/" + programId + "?format=json", function(data) {
+      var p = data && data.program
+      if (!p) return
+      var url = bareTemplate(p.programimagetemplatewide || p.programimagetemplate)
+      var next = {}
+      for (var k2 in programImages) next[k2] = programImages[k2]
+      next[programId] = url
+      programImages = next
+    })
+  }
+
+  // Artwork for a schedule entry: its own where it has one, otherwise its
+  // programme's. Empty until the lookup lands, and reactive when it does.
+  function artworkFor(episode) {
+    if (!episode) return ""
+    if (episode.imageUrl) return episode.imageUrl
+    var byProgram = programImages[episode.programId]
+    return byProgram || ""
   }
 
   function refresh() {
@@ -146,7 +198,7 @@ Item {
       var nxt = ch.nextscheduledepisode
 
       if (cur) {
-        currentImage = cur.socialimage || ""
+        currentImage = bareTemplate(cur.socialimage)
         currentTitle = cur.title || ""
         currentProgram = (cur.program && cur.program.name) || ""
         currentStartMs = parseDate(cur.starttimeutc)

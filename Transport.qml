@@ -54,10 +54,50 @@ Item {
   // entry; `rightnow` is the fallback for the programme on air, whose entry
   // the day list can lag behind over a rollover.
   readonly property string programmeImage: {
-    if (playheadEpisode && playheadEpisode.imageUrl) return playheadEpisode.imageUrl
-    if (!inPreviousProgramme && schedule) return schedule.currentImage
+    if (!schedule) return ""
+    // Depend on the lookup table so this re-evaluates when a programme's
+    // artwork arrives.
+    var ignored = schedule.programImages
+    var art = schedule.artworkFor(playheadEpisode)
+    if (art !== "") return art
+    if (!inPreviousProgramme) return schedule.currentImage
     return ""
   }
+
+  // What the caption shows: the programme last resolved, held across restarts.
+  //
+  // Any seek outside what the player holds restarts the stream, and during
+  // that the playhead is briefly meaningless -- so the episode lookup comes
+  // back empty and the name and picture would drop out and reload, even when
+  // the programme has not changed at all. These only move when the programme
+  // genuinely does.
+  property double heldStartMs: 0
+  property string heldTitle: ""
+  property string heldImage: ""
+
+  function refreshHeld() {
+    if (!player || !player.active) { heldStartMs = 0; heldTitle = ""; heldImage = ""; return }
+    var title = programmeTitle
+    var image = programmeImage
+    var startMs = onDemand ? windowStartMs
+      : (playheadEpisode ? playheadEpisode.startMs : 0)
+    // Nothing resolved yet -- mid-restart. Keep what is on screen.
+    if (startMs === 0 && title === "") return
+    if (startMs !== heldStartMs) {
+      heldStartMs = startMs
+      heldTitle = title
+      heldImage = image
+      return
+    }
+    // Same programme: let a late-arriving title or picture fill in, but never
+    // blank one that is already showing.
+    if (title !== "") heldTitle = title
+    if (image !== "") heldImage = image
+  }
+
+  onProgrammeTitleChanged: refreshHeld()
+  onProgrammeImageChanged: refreshHeld()
+  onWindowStartMsChanged: refreshHeld()
 
   // The programme actually being heard.
   readonly property string programmeTitle: {
@@ -125,7 +165,7 @@ Item {
   // start already lands several seconds into it. A tighter window would have
   // expired before the listener could press again, leaving no way to walk
   // back through programmes at all.
-  property int startGraceMs: 10000
+  property int startGraceMs: 20000
 
   readonly property bool atProgrammeStart: !!player
     && (player.playheadWallMs - programmeStartMs) < startGraceMs

@@ -72,12 +72,14 @@ there is genuinely nothing behind; forward only while on the live edge.
 ### |◀ step back
 
 - Playhead well into the programme → its beginning.
-- Within about ten seconds of the beginning → the previous programme, from its
-  start.
+- Within about twenty seconds of the beginning → the previous programme, from
+  its start.
 
-Ten rather than the two or three such a grace would normally be: arriving is
-not instant, and a jump to a programme's start already lands several seconds
-into it, so a tighter window would expire before a second press was possible.
+Twenty rather than the two or three such a grace would normally be: arriving
+is not instant. Restarting the stream takes a few seconds, a jump to a
+programme's start already lands several seconds into it, and the listener
+needs a moment to press again — a tighter window expires before the second
+press lands, which makes walking back through programmes impossible.
 
 Repeated presses keep walking back through the day's schedule.
 
@@ -102,10 +104,21 @@ a recording, and both have something ahead of them.
 ### Cover art and captions
 
 While playing, the panel names the programme being heard and shows its cover
-art beneath. A second line carries what SR is announcing over the stream, but
-only when it says something the programme name does not. All three follow the
-*playhead*, so stepping back through programmes changes them; a programme SR
-has no art for simply shows none.
+art beneath, whole and at its own proportions -- never cropped, since SR
+composes these wide and the subject is often at an edge. A second line carries
+what SR is announcing over the stream, but only when it says something the
+programme name does not.
+
+All three follow the *playhead*, so stepping back through programmes changes
+them. Artwork comes from the schedule entry where it has one and from the
+programme otherwise; every programme has one, so it is normal for a picture to
+appear a moment after the name.
+
+**They change only when the programme does.** Any seek outside what the player
+holds restarts the stream, and while that happens the playhead is briefly
+meaningless — so the name and picture are held rather than recomputed, and a
+seek that stays inside the same programme leaves the caption untouched. It
+must not blink.
 
 ### Play / pause
 

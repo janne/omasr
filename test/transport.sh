@@ -105,9 +105,18 @@ fi
 # --------------------------------------------------------------- pause
 if group "pause"; then
   sr play $CH >/dev/null; sleep 8
-  # Sample *after* pausing: playback keeps moving between reading the clock
-  # and the pause taking effect, so comparing across it races by a second.
-  sr pause >/dev/null; sleep 1
+  ready
+  # Sample once the playhead has actually stopped, not a fixed moment after
+  # asking: the request takes a little to land, and comparing across that
+  # races with playback still moving.
+  sr pause >/dev/null
+  prev=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    now=$(clock)
+    [ -n "$now" ] && [ "$now" = "$prev" ] && break
+    prev=$now
+    sleep 1
+  done
   paused_at=$(clock)
   sleep 4
   is   "pausing holds the playhead" "$(clock)" "$paused_at"

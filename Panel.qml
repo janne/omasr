@@ -602,12 +602,14 @@ Panel {
           id: caption
           width: parent.width
           spacing: Style.space(7)
-          visible: player.status === "playing"
+          // Stays put through a restart: hiding it while the stream comes back
+          // is what made the caption blink on every seek.
+          visible: player.active && player.status !== "error"
 
           Text {
             id: captionTitle
             width: parent.width
-            text: transport.programmeTitle
+            text: transport.heldTitle
             visible: text !== ""
             color: root.foreground
             font.family: root.fontFamily
@@ -622,7 +624,7 @@ Panel {
             // Only when it says something the programme name does not.
             text: {
               var icy = player.nowPlaying
-              var show = transport.programmeTitle
+              var show = transport.heldTitle
               if (icy === "" || icy === show) return ""
               if (show !== "" && icy.indexOf(show) === 0)
                 return icy.substring(show.length).replace(/^[\s,\u00b7-]+/, "")
@@ -638,14 +640,17 @@ Panel {
             wrapMode: Text.WordWrap
           }
 
-          // Cover art across the panel. SR's artwork is square; it is cropped
-          // to a band rather than shown at full height, which on a panel this
-          // wide would be taller than everything above it put together.
+          // Cover art across the panel, shown whole. Its height follows the
+          // artwork's own proportions rather than being fixed, so nothing is
+          // cropped away -- SR composes these wide, and the interesting part
+          // is often at an edge.
           Rectangle {
             id: cover
             width: parent.width
-            height: Math.min(width, Style.space(150))
-            visible: transport.programmeImage !== "" && coverImage.status === Image.Ready
+            height: coverImage.status === Image.Ready && coverImage.implicitWidth > 0
+              ? Math.round(width * coverImage.implicitHeight / coverImage.implicitWidth)
+              : 0
+            visible: transport.heldImage !== "" && coverImage.status === Image.Ready
             radius: Math.max(Style.space(3), Style.cornerRadius)
             color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
             clip: true
@@ -653,13 +658,14 @@ Panel {
             Image {
               id: coverImage
               anchors.fill: parent
-              source: transport.programmeImage
+              source: transport.heldImage
               // Loaded off the render thread, and kept so a rollover between
-              // programmes does not blink.
+              // programmes does not blink. The source is 2048 wide; decoding
+              // it at panel size keeps that out of memory.
               asynchronous: true
               cache: true
-              fillMode: Image.PreserveAspectCrop
-              sourceSize.width: cover.width * 2
+              fillMode: Image.PreserveAspectFit
+              sourceSize.width: Math.max(64, cover.width * 2)
             }
           }
         }
