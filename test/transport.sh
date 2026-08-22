@@ -105,9 +105,12 @@ fi
 # --------------------------------------------------------------- pause
 if group "pause"; then
   sr play $CH >/dev/null; sleep 8
-  local_before=$(clock)
-  sr pause >/dev/null; sleep 4
-  is   "pausing holds the playhead" "$(clock)" "$local_before"
+  # Sample *after* pausing: playback keeps moving between reading the clock
+  # and the pause taking effect, so comparing across it races by a second.
+  sr pause >/dev/null; sleep 1
+  paused_at=$(clock)
+  sleep 4
+  is   "pausing holds the playhead" "$(clock)" "$paused_at"
   sr pause >/dev/null; sleep 2
   is   "resuming keeps control"     "$(seekable)" "yes"
   sr live >/dev/null; sleep 4
@@ -170,6 +173,32 @@ if group "boundaries"; then
   sr forward 15 >/dev/null; settle; ready
   isnt "forward 15 at a programme end moves on"                 "$(clock)" "$end_clock"
   is   "and stays controllable"                                 "$(seekable)" "yes"
+fi
+
+# ------------------------------------- landing on a programme, not before it
+if group "landing"; then
+  # Stepping back to the start of the programme on air must land inside it.
+  # Playback can only begin on a segment boundary, and rounding to the
+  # straddling one used to open with the tail of the previous programme.
+  sched=$(curl -s --max-time 20 \
+      "https://api.sr.se/api/v2/scheduledepisodes/rightnow?channelid=$CHANNEL_ID&format=json" \
+    | jq -r '.channel.currentscheduledepisode.starttimeutc' \
+    | grep -o '[0-9]\{10\}' | head -1)
+  sr play $CH >/dev/null; sleep 10
+  sr stepBack >/dev/null; settle; ready
+  landed=$(clock)
+  if [ -z "$sched" ] || [ -z "$landed" ]; then
+    skip "steps back to inside the programme, not before it" "no schedule or playhead"
+  else
+    landed_epoch=$(date -d "today $landed" +%s)
+    delta=$((landed_epoch - sched))
+    # Generous upper bound: the playhead keeps moving while the test settles.
+    if [ "$delta" -ge 0 ] && [ "$delta" -lt 60 ]; then
+      ok "steps back to inside the programme, not before it"
+    else
+      no "steps back to inside the programme, not before it" "landed ${delta}s from its start"
+    fi
+  fi
 fi
 
 # --------------------------------------------------- never past the present

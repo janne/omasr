@@ -31,7 +31,12 @@ Item {
   }
 
   // Resolve `wallMs` to a starting segment. Calls back with
-  // { index, startMs } for the segment covering it, or null.
+  // { index, startMs, url } or null.
+  //
+  // `url` is the variant playlist the index was counted in, and is what should
+  // be played: handing mpv the master instead would let it choose its own
+  // variant, and a segment index only means something within the playlist it
+  // was counted in.
   function locate(wallMs, callback) {
     fetchVariant(function(variantUrl) {
       if (!variantUrl) { callback(null); return }
@@ -41,7 +46,9 @@ Item {
         if (!parsed) { callback(null); return }
         root.windowStartMs = parsed.startMs
         root.windowEndMs = parsed.startMs + parsed.total * 1000
-        callback(locateIn(parsed, wallMs))
+        var spot = locateIn(parsed, wallMs)
+        if (spot) spot.url = variantUrl
+        callback(spot)
       })
     })
   }
@@ -51,13 +58,29 @@ Item {
     locate(Date.now(), function(ignored) {})
   }
 
+  // Playback can only begin on a segment boundary -- ffmpeg will not seek into
+  // a live playlist -- so an instant inside a segment has to round to one.
+  //
+  // It rounds *up*, to the segment starting at or after the instant, rather
+  // than to the one straddling it. Starting at the straddling segment would
+  // begin up to a segment early, which when the instant is a programme's start
+  // means opening with the last seconds of the programme before it. Better to
+  // miss a moment of the one asked for. A segment that begins within a second
+  // of the instant is close enough to use as-is.
+  property real boundaryToleranceSec: 1.0
+
   function locateIn(parsed, wallMs) {
     var offset = (wallMs - parsed.startMs) / 1000
     if (offset < 0) offset = 0
     var acc = 0
     for (var i = 0; i < parsed.durations.length; i++) {
       var d = parsed.durations[i]
-      if (acc + d > offset) return { index: i, startMs: parsed.startMs + acc * 1000 }
+      if (acc + d > offset) {
+        var into = offset - acc
+        if (into > boundaryToleranceSec && i + 1 < parsed.durations.length)
+          return { index: i + 1, startMs: parsed.startMs + (acc + d) * 1000 }
+        return { index: i, startMs: parsed.startMs + acc * 1000 }
+      }
       acc += d
     }
     var last = Math.max(0, parsed.durations.length - 1)

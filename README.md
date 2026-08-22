@@ -54,7 +54,11 @@ where the plain mp3 is ~96.
 
 Small moves use what the player has already buffered. Anything further back
 restarts the stream at the right segment, because ffmpeg will not seek inside a
-live playlist — so a large jump has a second or two of gap.
+live playlist — so a large jump has a second or two of gap, and lands on a
+segment boundary: within about six seconds *after* the moment asked for, never
+before it. Going to a programme's start can therefore clip a moment of its
+opening, which is the better way to be wrong — the alternative opens with the
+end of the previous programme.
 
 Past the window, published files are the only way back. SR publishes most
 produced programmes, often while still on air, and generally nothing for live

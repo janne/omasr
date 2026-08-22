@@ -12,6 +12,11 @@ Everything follows from there being two ways to hear a programme:
   window can be played, whatever the programme is. Small moves use what the
   player has already buffered; reaching further back restarts the stream at
   the right segment, because ffmpeg will not seek inside a live playlist.
+
+  Playback can therefore only begin on a **segment boundary**, about every 6
+  seconds. An instant inside a segment rounds *up*, to the boundary at or after
+  it: going to a programme's start may miss a few seconds of its opening, but
+  never opens with the end of the programme before it.
 - **recorded** — a file SR has published for a programme. Seekable throughout,
   and the only way back beyond the DVR window.
 
@@ -104,6 +109,8 @@ without you and resuming picks up where you stopped.
   they finish, so a bulletin from this morning may be unreachable.
 - **Restarting the stream costs a second or two.** Any move outside what the
   player has buffered respawns it, so a large jump has a short gap.
+- **Positions round to a segment boundary**, so a jump lands within about six
+  seconds after the instant asked for, never before it.
 - **Repeats map imprecisely.** SR often fills a slot with a repeat whose file
   is a different length from the slot. Offsets derived from the schedule are
   clamped into the file, so clock positions inside such a programme are

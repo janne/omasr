@@ -73,7 +73,9 @@ Panel {
         key: tile.key,
         name: tile.name,
         station: tile.station,
-        url: tile.url,
+        // The variant the index was counted in, not the master: a segment
+        // index only means anything within its own playlist.
+        url: spot.url || tile.url,
         mode: "live",
         startIndex: spot.index,
         // Position 0 of this player is the start of that segment.
