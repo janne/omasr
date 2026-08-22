@@ -44,29 +44,24 @@ where you can see which regional station P4 is pointed at.
 
 ### How far back you can go
 
-SR publishes no seekable live stream — `srapi/<id>.mp3` and the misleadingly
-named `hls/<id>.m3u8` both resolve to a plain ICY stream with no DVR window.
-What makes rewinding work is mpv's own demuxer back-cache: it can seek back
-through everything it has already received.
+About three hours, on any programme.
 
-So the live stream alone can only be scrubbed within **what has been received
-since you tuned in**, usually the last few minutes. Pausing counts as stepping
-back: the broadcast carries on without you, and resuming picks up where you
-stopped.
+SR's live HLS stream (`srapi/<id>.hls`, one of the URLs its own audio-template
+API lists) carries a rolling DVR window of roughly three hours, stamped with
+absolute times. That is what SR's own apps rewind through, and it does not
+depend on the programme having been published as a file. It is also ~192 kbps
+where the plain mp3 is ~96.
 
-Published files make up the difference. SR publishes many programmes as a file,
-often while they are still on air, and where one exists the player **switches
-to it the moment you ask for something the buffer does not hold** — scrubbing
-to an earlier point on the timeline, or pressing back past the oldest thing
-buffered. It opens the file at the moment you asked for, so the handoff is just
-a jump, and from there the whole broadcast window seeks normally. Pressing
-**Direkt** goes back to the live feed.
+Small moves use what the player has already buffered. Anything further back
+restarts the stream at the right segment, because ffmpeg will not seek inside a
+live playlist — so a large jump has a second or two of gap.
 
-That means the timeline is fully scrubbable for a published programme and only
-buffer-deep for one SR has not published — live desks like the news generally
-have nothing until they finish. The bright section of the bar shows which case
-you are in, and the back controls dim when there is genuinely nothing behind
-the playhead.
+Past the window, published files are the only way back. SR publishes most
+produced programmes, often while still on air, and generally nothing for live
+desks until they finish; stepping back through the schedule uses those.
+
+Pausing counts as stepping back: the broadcast carries on without you, and
+resuming picks up where you stopped. **Direkt** returns to the live edge.
 
 ## Install
 
@@ -226,6 +221,24 @@ times, 1.5s apart, before the panel gives up and reports the failure.
 
 **Now playing.** When SR sends ICY metadata on the stream, the current
 programme and track are shown under the tiles.
+
+## Checking it still works
+
+[`SPEC.md`](SPEC.md) is the behaviour contract — what each control does in each
+state, and the rules that hold everywhere. `test/transport.sh` drives the
+plugin over its IPC and checks that contract against live radio:
+
+```bash
+test/transport.sh            # the whole suite
+test/transport.sh seeking    # just the groups matching "seeking"
+```
+
+It plays real audio briefly. Some behaviour depends on whether SR has published
+the programme currently on air, so the suite asks the API first and checks the
+expectations that apply to the case it finds.
+
+Update `SPEC.md` first when behaviour should change, then the tests, then the
+code.
 
 ## Hacking on it
 

@@ -80,6 +80,11 @@ Item {
 
   // "live" | "ondemand"
   property string mode: "live"
+
+  // The live stream was started at a chosen point in the DVR window rather
+  // than at the live edge. Such a player cannot seek forward to live -- its
+  // cache begins where it started -- so rejoining live means re-tuning.
+  property bool dvrStarted: false
   property real timePos: 0
   // Head of the demuxer cache: in live mode this is the live edge.
   property real cacheEnd: 0
@@ -113,7 +118,16 @@ Item {
     ? Math.max(0, cacheEnd - 0.5)
     : Math.max(0, Math.min(duration - 5, (nowMs - originWallMs) / 1000))
 
-  readonly property double liveWallMs: originWallMs + reachableEndSec * 1000
+  // How far this player can seek without being restarted: everything it has
+  // buffered, which for a DVR-started stream begins where it started.
+  readonly property real inProcessRoomSec: Math.max(0, reachableEndSec - timePos)
+
+  // The live edge. On a live stream that is simply now -- the cache head is
+  // only where *this* player has read to, which after starting inside the DVR
+  // window says nothing about how far behind the broadcast we are.
+  readonly property double liveWallMs: mode === "live"
+    ? nowMs
+    : originWallMs + reachableEndSec * 1000
   // Oldest point we could seek back to.
   readonly property double seekableStartWallMs: originWallMs + cacheBegin * 1000
 
@@ -186,6 +200,7 @@ Item {
     lastError = ""
     _resetTransport()
     _kill()
+    stopSweep.restart()
   }
 
   // The behavior the four channel buttons implement: the playing channel
@@ -213,7 +228,9 @@ Item {
     // the playhead pinned, which reads as a hang; in a programme still on air
     // it would step into a part of the file that does not exist yet.
     if (seconds > 0) {
-      var room = behindLiveSec - 1.0
+      // Clamped by what is buffered, not by the distance to live: reaching
+      // further forward than that needs a restart, which the panel arranges.
+      var room = inProcessRoomSec - 1.0
       if (room <= 0) return
       seconds = Math.min(seconds, room)
     }
@@ -230,8 +247,10 @@ Item {
     var clamped = Math.max(lo, Math.min(hi, target))
     // Scrubbing to within a couple of seconds of the head counts as going back
     // to live, so the lamp lights up rather than leaving a Direkt button that
-    // would do nothing.
-    if (mode === "live") timeShifted = (hi - clamped) > 2
+    // would do nothing. Not so for a player started inside the DVR window:
+    // its head is wherever it has read to, nowhere near the broadcast, so it
+    // is time-shifted until it is re-tuned.
+    if (mode === "live") timeShifted = dvrStarted || (hi - clamped) > 2
     ipc.command(["seek", clamped, "absolute"])
   }
 
@@ -260,6 +279,9 @@ Item {
     var path = ipc.socketPath
     if (path === "") return
     ipc.socketPath = ""
+    // Only ever the path we tracked. A blanket sweep would race: the removal
+    // is detached, and by the time it ran a replacement child could already
+    // have created its own socket.
     Quickshell.execDetached(["rm", "-f", path])
   }
 
@@ -291,7 +313,8 @@ Item {
     lastError = ""
     status = "connecting"
     mode = source.mode || "live"
-    timeShifted = false
+    timeShifted = !!source.timeShifted
+    dvrStarted = isFinite(Number(source.startIndex)) && Number(source.startIndex) >= 0
     _source = source
     _resetTransport(source.startAtSec)
 
@@ -315,9 +338,12 @@ Item {
     var socketPath = _runtimeDir + "/omasr-mpv-" + _spawnSerial + ".sock"
 
     // Position 0 of a live stream is the moment we connect.
-    originWallMs = mode === "live" ? Date.now() : (_source.originWallMs || Date.now())
+    // Live normally starts at the live edge, so position 0 is "now" -- unless
+    // we deliberately started inside the DVR window, which names its own.
+    originWallMs = _source.originWallMs || Date.now()
     if (mode === "ondemand") duration = _source.duration || 0
     var startAt = Number(_source.startAtSec) || 0
+    var startIndex = Number(_source.startIndex)
 
     proc.command = [
       "mpv", _source.url,
@@ -339,6 +365,11 @@ Item {
     // Seeking after playback starts would be audible as a stutter, so let mpv
     // open the file at the right place instead.
     if (startAt > 0) proc.command = proc.command.concat(["--start=" + startAt.toFixed(2)])
+    // Begin at a chosen point in the live DVR window. ffmpeg will not seek
+    // inside a live playlist, but it will start at a given segment.
+    if (isFinite(startIndex) && startIndex >= 0)
+      proc.command = proc.command.concat(
+        ["--demuxer-lavf-o=live_start_index=" + Math.round(startIndex)])
     ipc.socketPath = socketPath
     proc.running = true
     ipc.beginConnect()
@@ -429,6 +460,20 @@ Item {
     interval: 500
     repeat: true
     onTriggered: root.nowMs = Date.now()
+  }
+
+  // Once stopped, clear any socket a child left behind -- one killed mid-switch
+  // can exit without us ever recording its path. Guarded on nothing playing,
+  // so tuning straight back in cannot have its socket swept from under it.
+  Timer {
+    id: stopSweep
+    interval: 2000
+    repeat: false
+    onTriggered: {
+      if (root.active || proc.running) return
+      Quickshell.execDetached(["sh", "-c",
+        "rm -f \"${XDG_RUNTIME_DIR:-/tmp}\"/omasr-mpv-*.sock"])
+    }
   }
 
   Timer {

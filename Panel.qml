@@ -63,6 +63,26 @@ Panel {
 
   // Play a published programme file on the tuned-in channel, keeping the
   // channel identity so the tile stays lit and Direkt still returns to live.
+  // Play the live stream from a moment inside its DVR window.
+  function playLiveFrom(wallMs) {
+    if (!playingTile) return
+    var tile = playingTile
+    liveWindow.locate(wallMs, function(spot) {
+      if (!spot) { player.seekToWall(wallMs); return }   // window moved; clamp
+      player.playSource({
+        key: tile.key,
+        name: tile.name,
+        station: tile.station,
+        url: tile.url,
+        mode: "live",
+        startIndex: spot.index,
+        // Position 0 of this player is the start of that segment.
+        originWallMs: spot.startMs,
+        timeShifted: true
+      })
+    })
+  }
+
   function playProgramme(audio, atSec) {
     if (!audio || !playingTile) return
     player.playSource({
@@ -95,6 +115,7 @@ Panel {
   // broadcast window reachable rather than only the buffer.
   readonly property bool programmeFullySeekable: player.mode === "ondemand"
     || !!schedule.currentAudio
+    || (liveWindow.known && liveWindow.windowStartMs <= transport.windowStartMs)
 
   // Playing the file of the programme that is on air right now.
   //
@@ -133,18 +154,23 @@ Panel {
       && wallMs >= transport.windowStartMs
       && wallMs < transport.windowEndMs
 
-    if (inThisProgramme) {
-      if (player.mode === "ondemand" || wallMs >= player.seekableStartWallMs - 500) {
-        player.seekToWall(wallMs)
-        return
-      }
-      // Live, but older than the buffer holds: the published file has it.
-      var current = schedule.currentAudio
-      if (current) playProgramme(current, (wallMs - current.startMs) / 1000)
-      else player.seekToWall(wallMs)   // clamps to the oldest buffered moment
+    // Already reachable in what this player holds.
+    if (player.mode === "ondemand" && inThisProgramme) { player.seekToWall(wallMs); return }
+    // Reachable in what this live player has buffered -- both ends matter: a
+    // target past the head needs the stream restarted further on, not a seek
+    // that silently clamps.
+    if (player.mode === "live"
+        && wallMs >= player.seekableStartWallMs - 500
+        && wallMs <= player.originWallMs + player.reachableEndSec * 1000) {
+      player.seekToWall(wallMs)
       return
     }
 
+    // Inside the live DVR window: restart the live stream there. This works
+    // whatever the programme is, so it is preferred over a published file.
+    if (liveWindow.covers(wallMs)) { playLiveFrom(wallMs); return }
+
+    // Older than the window. A published file is the only way back that far.
     var episode = schedule.episodeAt(wallMs)
     if (!episode) { player.seekToWall(wallMs); return }
     schedule.resolveAudio(episode.id, episode.startMs, episode.title, function(audio) {
@@ -167,6 +193,14 @@ Panel {
       // rather than sitting at the end with the button dimmed.
       if (player.mode === "ondemand" && roomAhead <= seconds) {
         stepForward()
+        return
+      }
+      // On a live stream, forward past what this player has buffered needs it
+      // restarted further on -- or, if that is the live edge, rejoined.
+      if (player.mode === "live" && player.inProcessRoomSec - 1.0 <= seconds) {
+        var ahead = player.playheadWallMs + seconds * 1000
+        if (ahead >= player.liveWallMs - 5000) returnToLive()
+        else seekToWall(ahead)
         return
       }
       player.seekRelative(seconds)
@@ -192,9 +226,15 @@ Panel {
   // and start it properly from the top.
   function stepBack() {
     if (!player.active) return
-    if (transport.atProgrammeStart) stepToProgrammeBefore(transport.windowStartMs, 6)
-    else if (player.mode !== "ondemand" && schedule.currentAudio) playCurrentProgrammeFromStart()
-    else player.seekToStart()
+    if (transport.atProgrammeStart) {
+      stepToProgrammeBefore(transport.windowStartMs, 6)
+    } else if (liveWindow.covers(transport.windowStartMs)) {
+      playLiveFrom(transport.windowStartMs)
+    } else if (player.mode !== "ondemand" && schedule.currentAudio) {
+      playCurrentProgrammeFromStart()
+    } else {
+      player.seekToStart()
+    }
   }
 
   // Advance to the programme after the one being heard. Running out of
@@ -213,19 +253,20 @@ Panel {
     if (hopsLeft <= 0) { returnToLive(); return }
     var next = schedule.episodeAfter(startMs)
     if (!next) { returnToLive(); return }
-
     // The programme on air is played from its beginning like any other, rather
     // than being skipped over into the live feed. Stepping forward once more
     // from inside it is what joins the broadcast.
-    if (schedule.currentStartMs > 0 && next.startMs >= schedule.currentStartMs) {
-      if (schedule.currentAudio) playProgramme(schedule.currentAudio, 0)
-      else returnToLive()   // nothing published to start from
-      return
-    }
+    playProgrammeAt(next, function() { root.stepToProgrammeAfter(next.startMs, hopsLeft - 1) })
+  }
 
-    schedule.resolveAudio(next.id, next.startMs, next.title, function(audio) {
+  // Start a scheduled programme at its beginning, by whichever route reaches
+  // it. The DVR window is tried first: it covers every programme inside it,
+  // published or not, which a file lookup does not.
+  function playProgrammeAt(episode, onUnavailable) {
+    if (liveWindow.covers(episode.startMs)) { playLiveFrom(episode.startMs); return }
+    schedule.resolveAudio(episode.id, episode.startMs, episode.title, function(audio) {
       if (audio) playProgramme(audio, 0)
-      else root.stepToProgrammeAfter(next.startMs, hopsLeft - 1)
+      else onUnavailable()
     })
   }
 
@@ -237,10 +278,7 @@ Panel {
     if (hopsLeft <= 0) return
     var prev = schedule.episodeBefore(startMs)
     if (!prev) return
-    schedule.resolveAudio(prev.id, prev.startMs, prev.title, function(audio) {
-      if (audio) playProgramme(audio)
-      else root.stepToProgrammeBefore(prev.startMs, hopsLeft - 1)
-    })
+    playProgrammeAt(prev, function() { root.stepToProgrammeBefore(prev.startMs, hopsLeft - 1) })
   }
 
   // The current programme from its real start, where SR has published it --
@@ -251,7 +289,11 @@ Panel {
   // edge only works while a live stream is what is playing; a published
   // programme has no live edge, so that case re-tunes the channel instead.
   function returnToLive() {
-    if (player.mode === "ondemand") {
+    // Seeking to the live edge only works for a player that is following it.
+    // A published file has no live edge, and a live player started inside the
+    // DVR window has a cache that begins where it started -- both have to be
+    // re-tuned.
+    if (player.mode === "ondemand" || player.dvrStarted) {
       if (playingTile) player.play(playingTile)
     } else {
       player.goLive()
@@ -299,6 +341,11 @@ Panel {
     // A programme running out continues with the next one, just as the
     // broadcast did -- and rejoins the live feed once it catches up.
     function onProgrammeEnded() { root.stepForward() }
+  }
+
+  LiveWindow {
+    id: liveWindow
+    masterUrl: root.playingTile ? root.playingTile.url : ""
   }
 
   Schedule {
@@ -370,6 +417,16 @@ Panel {
     function next(): string {
       root.stepForward()
       return "stepping forward"
+    }
+    // What clicking the timeline does: go to a clock time today (HH:MM or
+    // HH:MM:SS). Exposed mainly so the timeline's path is testable.
+    function seekTo(clock: string): string {
+      var m = String(clock).match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+      if (!m) return "expected HH:MM or HH:MM:SS"
+      var d = new Date()
+      d.setHours(Number(m[1]), Number(m[2]), Number(m[3] || 0), 0)
+      root.seekToWall(d.getTime())
+      return "ok"
     }
     function stepBack(): string {
       root.stepBack()

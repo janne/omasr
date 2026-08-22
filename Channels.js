@@ -16,7 +16,19 @@
 
 .pragma library
 
+// SR's HLS live stream. Preferred over the plain mp3 for two reasons: it
+// carries a rolling three-hour DVR window with absolute timestamps, which is
+// what makes rewinding live radio possible on any programme rather than only
+// on ones SR has published as a file; and it is ~192 kbps rather than ~96.
+//
+// Both URLs come from SR's own audio templates
+// (api.sr.se/api/v2/audiourltemplates/liveaudiotypes).
 function streamUrl(id) {
+  return "https://sverigesradio.se/topsy/direkt/srapi/" + id + ".hls"
+}
+
+// Plain ICY mp3. Kept as the fallback for when the HLS master cannot be read.
+function mp3StreamUrl(id) {
   return "https://www.sverigesradio.se/topsy/direkt/srapi/" + id + ".mp3"
 }
 
@@ -93,7 +105,8 @@ function resolved(p4RegionName) {
       color: c.color,
       id: isP4 ? region.id : c.id,
       station: isP4 ? region.name : c.name,
-      url: streamUrl(isP4 ? region.id : c.id)
+      url: streamUrl(isP4 ? region.id : c.id),
+      mp3Url: mp3StreamUrl(isP4 ? region.id : c.id)
     })
   }
   return out

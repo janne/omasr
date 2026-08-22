@@ -1,0 +1,111 @@
+# Behaviour
+
+What each control does, in each state. This is the contract `test/transport.sh`
+checks and the thing to update *first* when behaviour should change.
+
+## The two sources
+
+Everything follows from there being two ways to hear a programme:
+
+- **live** — the channel's HLS live stream, which carries a rolling DVR window
+  of roughly **three hours** stamped with absolute times. Anything inside that
+  window can be played, whatever the programme is. Small moves use what the
+  player has already buffered; reaching further back restarts the stream at
+  the right segment, because ffmpeg will not seek inside a live playlist.
+- **recorded** — a file SR has published for a programme. Seekable throughout,
+  and the only way back beyond the DVR window.
+
+The DVR window is preferred wherever it reaches, since it does not depend on
+SR having published anything.
+
+`omarchy-shell omasr status` reports which source is playing:
+
+    playing P1 [live seek at 14:27:50]        live, on the live edge
+    playing P1 [-19s seek at 14:27:31]        live, 19s behind
+    playing P1 [-1522s seek at 16:48:14]      live, 25 minutes back in the DVR window
+    playing P1 [recorded seek at 13:30:00]    a published file
+    playing P1 [... NOSEEK ...]               mpv's control socket is not up
+
+## Channel buttons
+
+| Action | Result |
+|---|---|
+| Press a channel | Tunes in live |
+| Press the playing channel | Stops |
+| Press another channel | Switches to it |
+
+Exactly one stream plays at a time, always.
+
+## Transport
+
+### Direkt
+
+Lit red lamp while on the live edge; otherwise a button that returns there.
+Returning from a recorded programme re-tunes the channel, since a file has no
+live edge to seek to.
+
+### Timeline
+
+Spans the programme being heard, labelled with its broadcast start and end.
+The bright section is what can actually be reached — the whole programme when
+it is published, only what has been buffered when it is not. Clicking seeks to
+that instant, switching source if the instant lies in another programme or in
+a published file. A target that cannot be reached clamps to the nearest point
+that can.
+
+### ↺ 15 / ↻ 15
+
+Jump a quarter minute, and continue across programme boundaries:
+
+- Back off the **start** of a programme → the **end** of the previous one.
+- Forward off the **end** of a programme → the **start** of the next one.
+- Forward off the end of the programme **on air** → the live broadcast.
+
+Forward never runs past what has been broadcast. Back is dimmed only when
+there is genuinely nothing behind; forward only while on the live edge.
+
+### |◀ step back
+
+- Playhead more than 3s into the programme → its beginning.
+- Within 3s of the beginning → the previous programme, from its start.
+
+Repeated presses keep walking back through the day's schedule, skipping
+programmes SR has not published. "Its beginning" means the published file's
+start where one exists, and otherwise the oldest buffered moment — which for
+an unpublished programme may only be seconds back.
+
+### ▶| step forward
+
+- In a recorded programme → the next programme, from its start.
+- The programme **on air** is played from its beginning like any other.
+- Already inside the on-air programme → joins the live broadcast.
+- A programme playing out to its end advances the same way on its own.
+
+### Play / pause
+
+Pauses. On a live stream this is itself a time shift: the broadcast carries on
+without you and resuming picks up where you stopped.
+
+## Rules that hold everywhere
+
+1. **One mpv process.** Never two, never zero while something is playing.
+2. **The playhead never passes the present.** No seek, in either source, may
+   reach audio that has not been broadcast.
+3. **The control socket recovers.** If mpv's IPC is not up, every transport
+   control disables together, and the retry loop keeps trying — `NOSEEK` is
+   never a permanent state while a process is running.
+4. **Stopping leaves nothing behind.** No process, no socket.
+5. **A control that cannot act is dimmed** rather than silently doing nothing.
+
+## Known limits
+
+- **Beyond about three hours**, only published programmes can be reached. The
+  DVR window ends there, and SR publishes nothing for live desks until after
+  they finish, so a bulletin from this morning may be unreachable.
+- **Restarting the stream costs a second or two.** Any move outside what the
+  player has buffered respawns it, so a large jump has a short gap.
+- **Repeats map imprecisely.** SR often fills a slot with a repeat whose file
+  is a different length from the slot. Offsets derived from the schedule are
+  clamped into the file, so clock positions inside such a programme are
+  approximate.
+

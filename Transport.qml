@@ -28,30 +28,33 @@ Item {
   // air: rewind far enough, or sit time-shifted across a programme boundary,
   // and the bar has to keep describing the programme being heard rather than
   // jumping to the new one and stranding the playhead off-scale.
-  readonly property bool inPreviousProgramme: !!schedule
+  // Looked up from the schedule rather than assumed to be the current or the
+  // previous one: the DVR window reaches hours back, past both.
+  readonly property var playheadEpisode: (schedule && player && player.playheadWallMs > 0)
+    ? schedule.episodeAt(player.playheadWallMs) : null
+
+  readonly property bool inPreviousProgramme: !!playheadEpisode
     && !onDemand
-    && schedule.prevEndMs > 0
-    && !!player
-    && player.playheadWallMs > 0
-    && player.playheadWallMs < schedule.currentStartMs
+    && !!schedule && schedule.currentStartMs > 0
+    && playheadEpisode.startMs < schedule.currentStartMs
 
   // A published file carries its own window, so take it from the player
   // rather than guessing which scheduled episode it corresponds to.
   readonly property double windowStartMs: {
     if (onDemand) return player ? player.originWallMs : 0
     if (!schedule) return 0
-    return inPreviousProgramme ? schedule.prevStartMs : schedule.currentStartMs
+    return inPreviousProgramme ? playheadEpisode.startMs : schedule.currentStartMs
   }
   readonly property double windowEndMs: {
     if (onDemand) return player ? player.originWallMs + player.duration * 1000 : 0
     if (!schedule) return 0
-    return inPreviousProgramme ? schedule.prevEndMs : schedule.currentEndMs
+    return inPreviousProgramme ? playheadEpisode.endMs : schedule.currentEndMs
   }
   // The programme actually being heard.
   readonly property string programmeTitle: {
     if (onDemand) return player ? player.programme : ""
     if (!schedule) return ""
-    return inPreviousProgramme ? schedule.prevTitle : schedule.currentTitle
+    return inPreviousProgramme ? playheadEpisode.title : schedule.currentTitle
   }
 
   // Back steps to the start of what we can reach; once there, to the previous
