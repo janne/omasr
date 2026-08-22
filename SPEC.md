@@ -71,17 +71,30 @@ there is genuinely nothing behind; forward only while on the live edge.
 
 ### |◀ step back
 
-- Playhead more than 3s into the programme → its beginning.
-- Within 3s of the beginning → the previous programme, from its start.
+- Playhead well into the programme → its beginning.
+- Within about ten seconds of the beginning → the previous programme, from its
+  start.
 
-Repeated presses keep walking back through the day's schedule, skipping
-programmes SR has not published. "Its beginning" means the published file's
-start where one exists, and otherwise the oldest buffered moment — which for
-an unpublished programme may only be seconds back.
+Ten rather than the two or three such a grace would normally be: arriving is
+not instant, and a jump to a programme's start already lands several seconds
+into it, so a tighter window would expire before a second press was possible.
+
+Repeated presses keep walking back through the day's schedule.
+
+"Its beginning" is the programme's actual start, reached through the DVR
+window or a published file. Only when neither reaches it — a programme older
+than the window that SR never published — does it fall back to the oldest
+buffered moment. In particular, a short rewind beforehand must not change what
+"the beginning" means: it is a property of the programme, not of whatever
+happens to be buffered.
 
 ### ▶| step forward
 
-- In a recorded programme → the next programme, from its start.
+Available anywhere behind the live edge, whether that is a published file or a
+position inside the DVR window — being time-shifted is not the same as playing
+a recording, and both have something ahead of them.
+
+- Behind the live edge → the next programme, from its start.
 - The programme **on air** is played from its beginning like any other.
 - Already inside the on-air programme → joins the live broadcast.
 - A programme playing out to its end advances the same way on its own.

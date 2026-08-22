@@ -201,6 +201,31 @@ if group "landing"; then
   fi
 fi
 
+# ------------------------------- a small seek must not change what "back" means
+if group "landing"; then
+  # Stepping back after a short rewind must still reach the start of the
+  # programme being heard, not the one before it. What "the beginning" means
+  # is the programme's start, not the oldest moment happening to be buffered.
+  sched=$(curl -s --max-time 20 \
+      "https://api.sr.se/api/v2/scheduledepisodes/rightnow?channelid=$CHANNEL_ID&format=json" \
+    | jq -r '.channel.currentscheduledepisode.starttimeutc' \
+    | grep -o '[0-9]\{10\}' | head -1)
+  sr play $CH >/dev/null; sleep 12
+  sr back 15 >/dev/null; sleep 4        # a short rewind first
+  sr stepBack >/dev/null; settle; ready
+  landed=$(clock)
+  if [ -z "$sched" ] || [ -z "$landed" ]; then
+    skip "back after a short rewind still reaches this programme" "no schedule or playhead"
+  else
+    delta=$(( $(date -d "today $landed" +%s) - sched ))
+    if [ "$delta" -ge 0 ] && [ "$delta" -lt 60 ]; then
+      ok "back after a short rewind still reaches this programme"
+    else
+      no "back after a short rewind still reaches this programme" "landed ${delta}s from its start"
+    fi
+  fi
+fi
+
 # --------------------------------------------------- never past the present
 if group "future"; then
   sr play $CH >/dev/null; sleep 10

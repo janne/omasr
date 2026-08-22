@@ -131,9 +131,9 @@ Panel {
   readonly property bool earlierProgrammeExists: transport.windowStartMs > 0
     && schedule.episodeBefore(transport.windowStartMs) !== null
 
-  readonly property bool programmeStillOnAir: player.mode === "ondemand"
+  readonly property bool programmeStillOnAir: player.active
     && schedule.currentStartMs > 0
-    && Math.abs(player.originWallMs - schedule.currentStartMs) < 60000
+    && Math.abs(transport.windowStartMs - schedule.currentStartMs) < 60000
     && schedule.currentEndMs > player.nowMs
 
   // Go to a moment in the broadcast, whichever programme it falls in.
@@ -147,7 +147,9 @@ Panel {
 
     // Asking for the present, in a programme that is still on air, is asking
     // to rejoin the broadcast.
-    if (programmeStillOnAir && wallMs >= player.liveWallMs - 2000) {
+    // Compared against the clock rather than the player's own end, which for
+    // a recorded programme is just its last frame.
+    if (programmeStillOnAir && wallMs >= player.nowMs - 2000) {
       returnToLive()
       return
     }
@@ -244,9 +246,10 @@ Panel {
   // feed -- there is nothing later to play.
   function stepForward() {
     if (!player.active) return
-    if (player.mode !== "ondemand") { returnToLive(); return }
-    // Already inside the programme that is on air: the only thing after it is
-    // the live broadcast itself.
+    // Already following the broadcast: nothing ahead of it.
+    if (player.mode === "live" && !player.timeShifted) { returnToLive(); return }
+    // Inside the programme that is on air: the only thing after it is the
+    // live broadcast itself.
     if (programmeStillOnAir) { returnToLive(); return }
     stepToProgrammeAfter(transport.windowStartMs, 6)
   }

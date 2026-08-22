@@ -60,9 +60,10 @@ Item {
   // Back steps to the start of what we can reach; once there, to the previous
   // programme. Forward only exists while we are behind live.
   readonly property bool canStepBack: ready
-  // Only meaningful while a recorded programme is playing: there is nothing
-  // after the live broadcast to step to.
-  readonly property bool canStepForward: ready && onDemand
+  // Anywhere but the live edge there is something ahead: the next programme,
+  // or the broadcast itself. Being time-shifted inside the DVR window counts,
+  // which is not the same as playing a recorded file.
+  readonly property bool canStepForward: ready && !isLive
   // In a recorded programme there is always somewhere ahead to go: the rest of
   // it, the next programme, or the live broadcast. Only sitting on the live
   // edge leaves nothing in front.
@@ -99,14 +100,26 @@ Item {
   // far as the buffer, unless SR has published the programme being heard.
   readonly property double programmeStartMs: {
     if (!player) return windowStartMs
-    if (onDemand || currentAudio) return windowStartMs
+    // Where the programme can actually be started from. Once the DVR window
+    // or a published file reaches its real start, that is the answer; only
+    // when neither does is it limited to the oldest buffered moment.
+    if (fullySeekable) return windowStartMs
     return Math.max(windowStartMs, player.seekableStartWallMs)
   }
 
-  // Already at the beginning, by the usual few-seconds grace that makes a
-  // second press mean "the one before this".
+  // How long after a programme's start a press still counts as "already at
+  // the beginning", and so means "the one before this".
+  //
+  // Wider than the few seconds such a grace would normally be, because
+  // arriving here is not instant: restarting the stream takes a moment, and
+  // playback can only begin on a segment boundary, so a jump to a programme's
+  // start already lands several seconds into it. A tighter window would have
+  // expired before the listener could press again, leaving no way to walk
+  // back through programmes at all.
+  property int startGraceMs: 10000
+
   readonly property bool atProgrammeStart: !!player
-    && (player.playheadWallMs - programmeStartMs) < 3000
+    && (player.playheadWallMs - programmeStartMs) < startGraceMs
 
   implicitHeight: column.implicitHeight
 
