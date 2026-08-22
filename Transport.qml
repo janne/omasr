@@ -60,8 +60,10 @@ Item {
   // Only meaningful while a recorded programme is playing: there is nothing
   // after the live broadcast to step to.
   readonly property bool canStepForward: ready && onDemand
+  // In a recorded programme there is always somewhere ahead to go: the rest of
+  // it, the next programme, or the live broadcast. Only sitting on the live
+  // edge leaves nothing in front.
   readonly property bool canForward15: ready && !isLive
-    && (player.behindLiveSec > 1.5 || canCatchUp)
   // Nothing behind the playhead means the button would silently do nothing,
   // so dim it rather than let it look broken. How far back "behind" reaches
   // depends on whether the programme can be switched to as a file.

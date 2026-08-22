@@ -21,21 +21,23 @@ Once something is playing, the transport appears.
   broadcast start and end. Click or drag anywhere in it to seek. The bright
   section is what can actually be reached; a second, dimmer marker shows where
   live has got to once you are behind it.
-- **↺ 15 / ↻ 15** jump a quarter minute either way, and are dimmed when there
-  is nothing to move towards. Forward never runs past what has actually been
-  broadcast: step forward off the end of a programme still on air and it
-  rejoins the live feed rather than walking into the future.
+- **↺ 15 / ↻ 15** jump a quarter minute either way, and carry on across
+  programme boundaries: step back off the start of a programme and you land at
+  the end of the one before, step forward off its end and you land at the start
+  of the next. Forward never runs past what has actually been broadcast — off
+  the end of the programme on air, it rejoins the live feed rather than walking
+  into the future.
 - **|◀** goes to the beginning of the programme you are hearing. Press it again
   within three seconds and it steps back to the programme before that — the
   convention every music player uses. Keep pressing and it keeps walking back
   through the day's schedule, skipping programmes SR has not published.
-- **▶|** advances to the next programme, and rejoins the live broadcast once it
-  catches up with what is on air. A programme that simply plays out to its end
-  does the same thing on its own.
+- **▶|** advances to the next programme. The programme on air is played from
+  its beginning like any other; pressing forward once more from inside it is
+  what joins the live broadcast. A programme that plays out to its end advances
+  on its own in the same way.
 
-The schedule is treated as one continuous timeline, so seeking crosses
-programme boundaries: step back from the start of a programme and you land at
-the end of the one before it.
+The schedule is treated as one continuous timeline, which is what lets seeking
+cross programme boundaries rather than stopping dead at them.
 
 Hovering a channel puts its full station name in the panel header, which is
 where you can see which regional station P4 is pointed at.

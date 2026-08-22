@@ -156,10 +156,17 @@ Panel {
   function seekBy(seconds) {
     if (!player.active) return
     if (seconds > 0) {
+      var roomAhead = player.behindLiveSec - 1.0
       // Stepping forward off the end of what has been broadcast means the
       // live feed has caught up: join it rather than stopping short of it.
-      if (programmeStillOnAir && player.behindLiveSec - 1.0 <= seconds) {
+      if (programmeStillOnAir && roomAhead <= seconds) {
         returnToLive()
+        return
+      }
+      // Off the end of a recorded programme: carry on into the next one,
+      // rather than sitting at the end with the button dimmed.
+      if (player.mode === "ondemand" && roomAhead <= seconds) {
+        stepForward()
         return
       }
       player.seekRelative(seconds)
@@ -196,16 +203,26 @@ Panel {
   function stepForward() {
     if (!player.active) return
     if (player.mode !== "ondemand") { returnToLive(); return }
+    // Already inside the programme that is on air: the only thing after it is
+    // the live broadcast itself.
+    if (programmeStillOnAir) { returnToLive(); return }
     stepToProgrammeAfter(transport.windowStartMs, 6)
   }
 
   function stepToProgrammeAfter(startMs, hopsLeft) {
     if (hopsLeft <= 0) { returnToLive(); return }
     var next = schedule.episodeAfter(startMs)
-    if (!next || (schedule.currentStartMs > 0 && next.startMs >= schedule.currentStartMs)) {
-      returnToLive()
+    if (!next) { returnToLive(); return }
+
+    // The programme on air is played from its beginning like any other, rather
+    // than being skipped over into the live feed. Stepping forward once more
+    // from inside it is what joins the broadcast.
+    if (schedule.currentStartMs > 0 && next.startMs >= schedule.currentStartMs) {
+      if (schedule.currentAudio) playProgramme(schedule.currentAudio, 0)
+      else returnToLive()   // nothing published to start from
       return
     }
+
     schedule.resolveAudio(next.id, next.startMs, next.title, function(audio) {
       if (audio) playProgramme(audio, 0)
       else root.stepToProgrammeAfter(next.startMs, hopsLeft - 1)
