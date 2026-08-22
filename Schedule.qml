@@ -41,9 +41,14 @@ Item {
   // buffer happens to begin. Live desks -- news, morning shows -- generally
   // have nothing until after they finish, so this is often null.
   property var currentAudio: null
-  property var prevAudio: null
 
   readonly property bool valid: currentEndMs > 0
+
+  // The channel's full schedule for today and yesterday, oldest first, so the
+  // back button can walk back through programmes one at a time instead of
+  // only ever reaching the one before the live programme. Two days is enough
+  // to step back across midnight without another round trip.
+  property var daySchedule: []
 
   signal loaded()
 
@@ -58,7 +63,50 @@ Item {
     currentAudio = null
     prevTitle = ""; prevEpisodeId = 0; prevStartMs = 0; prevEndMs = 0
     nextTitle = ""; nextEpisodeId = 0; nextStartMs = 0
-    prevAudio = null
+  }
+
+  // Latest scheduled programme starting before `startMs`, or null.
+  function episodeBefore(startMs) {
+    var best = null
+    for (var i = 0; i < daySchedule.length; i++) {
+      var e = daySchedule[i]
+      if (e.startMs < startMs - 1000 && (!best || e.startMs > best.startMs)) best = e
+    }
+    return best
+  }
+
+  function dateStamp(offsetDays) {
+    var d = new Date(Date.now() + offsetDays * 86400000)
+    return Qt.formatDate(d, "yyyy-MM-dd")
+  }
+
+  function loadDays() {
+    if (channelId <= 0) { daySchedule = []; return }
+    var merged = []
+    var pending = 2
+    var id = channelId
+    function absorb(data) {
+      // A channel switch mid-flight would otherwise merge two channels'
+      // schedules into one list.
+      if (id !== root.channelId) return
+      var list = (data && data.schedule) || []
+      for (var i = 0; i < list.length; i++) {
+        merged.push({
+          id: list[i].episodeid || 0,
+          title: list[i].title || "",
+          startMs: parseDate(list[i].starttimeutc),
+          endMs: parseDate(list[i].endtimeutc)
+        })
+      }
+      if (--pending === 0) {
+        merged.sort(function(a, b) { return a.startMs - b.startMs })
+        daySchedule = merged
+      }
+    }
+    var base = "https://api.sr.se/api/v2/scheduledepisodes?channelid=" + channelId
+      + "&format=json&pagination=false&date="
+    getJson(base + dateStamp(-1), absorb)
+    getJson(base + dateStamp(0), absorb)
   }
 
   function refresh() {
@@ -96,11 +144,8 @@ Item {
       }
 
       currentAudio = null
-      prevAudio = null
       if (currentEpisodeId > 0) resolveAudio(currentEpisodeId, currentStartMs, currentTitle,
         function(a) { currentAudio = a })
-      if (prevEpisodeId > 0) resolveAudio(prevEpisodeId, prevStartMs, prevTitle,
-        function(a) { prevAudio = a })
 
       loaded()
       rescheduleRefresh()
@@ -151,7 +196,9 @@ Item {
 
   onChannelIdChanged: {
     clear()
+    daySchedule = []
     refresh()
+    loadDays()
   }
 
   Timer {

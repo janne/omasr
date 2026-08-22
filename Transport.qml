@@ -20,8 +20,7 @@ Item {
   readonly property bool ready: player ? player.canSeek : false
   readonly property bool hasWindow: schedule ? schedule.valid : false
 
-  // Only offer a programme when SR has actually published it as a file.
-  readonly property var prevAudio: schedule ? schedule.prevAudio : null
+  // Only offer the current programme when SR has actually published it.
   readonly property var currentAudio: schedule ? schedule.currentAudio : null
   readonly property bool onDemand: player ? player.mode === "ondemand" : false
 
@@ -60,9 +59,11 @@ Item {
   readonly property bool canStepBack: ready
   readonly property bool canStepForward: ready && (onDemand || !isLive)
   readonly property bool canForward15: ready && !isLive && player.behindLiveSec > 1.5
+  // Nothing behind the playhead means the button would silently do nothing,
+  // so dim it rather than let it look broken.
+  readonly property bool canBack15: ready && player.seekableBackSec > 1.5
 
   signal stepBackRequested()
-  signal playPrevious()
   signal playCurrentFromStart()
   signal returnToCurrent()
 
@@ -206,7 +207,7 @@ Item {
       TransportButton {
         kind: "skip"
         anchors.verticalCenter: parent.verticalCenter
-        actionEnabled: root.ready
+        actionEnabled: root.canBack15
         foreground: root.foreground
         fontFamily: root.fontFamily
         onActivated: if (root.player) root.player.seekRelative(-15)

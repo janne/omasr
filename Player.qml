@@ -111,6 +111,11 @@ Item {
 
   readonly property bool canSeek: status === "playing" && ipc.ready
 
+  // How much is actually behind the playhead. At the start of a published
+  // programme, or at the oldest thing still buffered, this is zero and there
+  // is nowhere left to rewind to.
+  readonly property real seekableBackSec: Math.max(0, timePos - cacheBegin)
+
   // --- internal ------------------------------------------------------------
 
   // Set before we kill the child ourselves, so onExited can tell a deliberate

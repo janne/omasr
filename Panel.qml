@@ -77,8 +77,6 @@ Panel {
     })
   }
 
-  function playPreviousProgramme() { playProgramme(schedule.prevAudio) }
-
   // The back button: go to the beginning of the programme being heard, unless
   // you are already within a few seconds of it, in which case go to the one
   // before -- the convention every music player uses.
@@ -88,9 +86,23 @@ Panel {
   // and start it properly from the top.
   function stepBack() {
     if (!player.active) return
-    if (transport.atProgrammeStart && schedule.prevAudio) playPreviousProgramme()
+    if (transport.atProgrammeStart) stepToProgrammeBefore(transport.windowStartMs, 6)
     else if (player.mode !== "ondemand" && schedule.currentAudio) playCurrentProgrammeFromStart()
     else player.seekToStart()
+  }
+
+  // Walk back through the schedule from `startMs`, playing the first
+  // programme SR has actually published. Unpublished ones are skipped rather
+  // than dead-ending the button on them -- a run of short news bulletins
+  // between produced programmes is common, and none of those have files.
+  function stepToProgrammeBefore(startMs, hopsLeft) {
+    if (hopsLeft <= 0) return
+    var prev = schedule.episodeBefore(startMs)
+    if (!prev) return
+    schedule.resolveAudio(prev.id, prev.startMs, prev.title, function(audio) {
+      if (audio) playProgramme(audio)
+      else root.stepToProgrammeBefore(prev.startMs, hopsLeft - 1)
+    })
   }
 
   // The current programme from its real start, where SR has published it --
@@ -203,9 +215,8 @@ Panel {
     function live(): string { root.returnToLive(); return "live" }
     function restart(): string { player.seekToStart(); return "ok" }
     function previous(): string {
-      if (!schedule.prevAudio) return "no published previous programme"
-      root.playPreviousProgramme()
-      return "playing " + schedule.prevAudio.title
+      root.stepToProgrammeBefore(transport.windowStartMs, 6)
+      return "stepping back"
     }
     // Same rule the back button follows.
     function stepBack(): string {
@@ -360,7 +371,6 @@ Panel {
           foreground: root.foreground
           fontFamily: root.fontFamily
           onStepBackRequested: root.stepBack()
-          onPlayPrevious: root.playPreviousProgramme()
           onPlayCurrentFromStart: root.playCurrentProgrammeFromStart()
           onReturnToCurrent: root.returnToLive()
         }

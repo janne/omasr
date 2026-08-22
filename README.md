@@ -21,11 +21,13 @@ Once something is playing, the transport appears.
   broadcast start and end. The bright section is what is in the buffer and can
   be scrubbed; a second, dimmer marker shows where live has got to once you are
   behind it. Click or drag anywhere in it to seek.
-- **↺ 15 / ↻ 15** jump a quarter minute either way. Forward is dimmed while you
-  are live, because there is nothing there yet.
+- **↺ 15 / ↻ 15** jump a quarter minute either way. Each is dimmed when there
+  is nothing to move towards: forward while you are live, back once you reach
+  the start of the buffer or of a programme.
 - **|◀** goes to the beginning of the programme you are hearing. Press it again
-  within three seconds and it steps back to the previous programme instead —
-  the convention every music player uses.
+  within three seconds and it steps back to the programme before that — the
+  convention every music player uses. Keep pressing and it keeps walking back
+  through the day's schedule, skipping programmes SR has not published.
 - **▶|** returns to the live broadcast.
 
 Hovering a channel puts its full station name in the panel header, which is
@@ -103,7 +105,7 @@ omarchy-shell omasr live           # back to the live broadcast
 omarchy-shell omasr stepBack       # what the |< button does
 omarchy-shell omasr fromStart      # the current programme from its start
 omarchy-shell omasr restart        # to the start of the buffer
-omarchy-shell omasr previous       # the previous programme, if published
+omarchy-shell omasr previous       # step back one programme
 ```
 
 ## How it works
@@ -126,6 +128,13 @@ omarchy-shell omasr previous       # the previous programme, if published
 and bitrate SR is currently serving, so there is nothing here to keep in sync
 when they move things around. The timeline comes from
 `scheduledepisodes/rightnow` on the same API.
+
+**Walking back.** Stepping back repeatedly needs the schedule *around the
+programme being heard*, not around the live one — otherwise every press finds
+the same "previous programme" and replays it. So the channel's full schedule
+for today and yesterday is fetched once (`scheduledepisodes?date=`), and each
+press looks up whatever was scheduled before the programme currently playing.
+Two days is enough to cross midnight without another round trip.
 
 **Logos.** The SR monogram and the four channel wordmarks are drawn with
 `QtQuick.Shapes` from Sveriges Radio's 2024 logo artwork rather than shipped as
