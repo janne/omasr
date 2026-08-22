@@ -29,7 +29,13 @@ Once something is playing, the transport appears.
   within three seconds and it steps back to the programme before that — the
   convention every music player uses. Keep pressing and it keeps walking back
   through the day's schedule, skipping programmes SR has not published.
-- **▶|** returns to the live broadcast.
+- **▶|** advances to the next programme, and rejoins the live broadcast once it
+  catches up with what is on air. A programme that simply plays out to its end
+  does the same thing on its own.
+
+The schedule is treated as one continuous timeline, so seeking crosses
+programme boundaries: step back from the start of a programme and you land at
+the end of the one before it.
 
 Hovering a channel puts its full station name in the panel header, which is
 where you can see which regional station P4 is pointed at.
@@ -110,6 +116,7 @@ omarchy-shell omasr stepBack       # what the |< button does
 omarchy-shell omasr fromStart      # the current programme from its start
 omarchy-shell omasr restart        # to the start of the buffer
 omarchy-shell omasr previous       # step back one programme
+omarchy-shell omasr next           # step forward one programme
 ```
 
 ## How it works
@@ -138,12 +145,19 @@ the right moment rather than opening at zero and seeking afterwards, which
 would be audible. `omarchy-shell omasr status` reports the playhead as a clock
 time, so it can be followed across a handoff.
 
-**Walking back.** Stepping back repeatedly needs the schedule *around the
-programme being heard*, not around the live one — otherwise every press finds
+**Walking the schedule.** Stepping between programmes needs the schedule
+*around the programme being heard*, not around the live one — otherwise every press finds
 the same "previous programme" and replays it. So the channel's full schedule
 for today and yesterday is fetched once (`scheduledepisodes?date=`), and each
-press looks up whatever was scheduled before the programme currently playing.
-Two days is enough to cross midnight without another round trip.
+step looks up what was scheduled either side of whatever is playing. Two days
+is enough to cross midnight without another round trip.
+
+A published file is opened at the offset the wall-clock target implies, clamped
+into the file. The clamp matters: SR often fills a slot with a repeat whose
+file is shorter than the slot it occupies, so an offset taken from the schedule
+can point past the end of the file. Clamping also gives a backwards boundary
+crossing the behaviour that reads correctly -- landing at the end of the
+previous programme rather than off the end of it.
 
 **Logos.** The SR monogram and the four channel wordmarks are drawn with
 `QtQuick.Shapes` from Sveriges Radio's 2024 logo artwork rather than shipped as

@@ -57,17 +57,20 @@ Item {
   // Back steps to the start of what we can reach; once there, to the previous
   // programme. Forward only exists while we are behind live.
   readonly property bool canStepBack: ready
-  readonly property bool canStepForward: ready && (onDemand || !isLive)
+  // Only meaningful while a recorded programme is playing: there is nothing
+  // after the live broadcast to step to.
+  readonly property bool canStepForward: ready && onDemand
   readonly property bool canForward15: ready && !isLive
     && (player.behindLiveSec > 1.5 || canCatchUp)
   // Nothing behind the playhead means the button would silently do nothing,
   // so dim it rather than let it look broken. How far back "behind" reaches
   // depends on whether the programme can be switched to as a file.
-  readonly property bool canBack15: ready && (fullySeekable
+  readonly property bool canBack15: ready && (hasEarlierProgramme || (fullySeekable
     ? player.playheadWallMs > windowStartMs + 1500
-    : player.seekableBackSec > 1.5)
+    : player.seekableBackSec > 1.5))
 
   signal stepBackRequested()
+  signal stepForwardRequested()
   signal playCurrentFromStart()
   signal returnToCurrent()
   // Seeking goes through the panel, which decides between moving inside the
@@ -82,6 +85,9 @@ Item {
   // Forwarding off the end of this programme rejoins the live broadcast, so
   // the button stays available right up to the present.
   property bool canCatchUp: false
+  // Something scheduled before this programme, so stepping back off the start
+  // of it has somewhere to land.
+  property bool hasEarlierProgramme: false
 
   // Where "the beginning of this programme" actually lands. A published file
   // starts at the programme's real start; a live stream can only go back as
@@ -262,7 +268,7 @@ Item {
         foreground: root.foreground
         fontFamily: root.fontFamily
         glyphSize: Style.space(15)
-        onActivated: root.returnToCurrent()
+        onActivated: root.stepForwardRequested()
       }
     }
   }

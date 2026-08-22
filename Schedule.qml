@@ -75,6 +75,25 @@ Item {
     return best
   }
 
+  // The scheduled programme covering a given instant, or null.
+  function episodeAt(wallMs) {
+    for (var i = 0; i < daySchedule.length; i++) {
+      var e = daySchedule[i]
+      if (wallMs >= e.startMs && wallMs < e.endMs) return e
+    }
+    return null
+  }
+
+  // Earliest scheduled programme starting after `startMs`, or null.
+  function episodeAfter(startMs) {
+    var best = null
+    for (var i = 0; i < daySchedule.length; i++) {
+      var e = daySchedule[i]
+      if (e.startMs > startMs + 1000 && (!best || e.startMs < best.startMs)) best = e
+    }
+    return best
+  }
+
   function dateStamp(offsetDays) {
     var d = new Date(Date.now() + offsetDays * 86400000)
     return Qt.formatDate(d, "yyyy-MM-dd")

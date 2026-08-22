@@ -74,7 +74,13 @@ Panel {
       mode: "ondemand",
       originWallMs: audio.startMs,
       duration: audio.duration,
-      startAtSec: Math.max(0, Number(atSec) || 0)
+      // Clamp into the file. A slot is often filled with a repeat whose file
+      // is shorter than the slot it occupies, so a wall-clock offset can point
+      // past the end of it -- and opening a file past its end just ends it.
+      // Clamping also gives stepping back across a boundary the behaviour that
+      // reads correctly: land at the end of the previous programme.
+      startAtSec: Math.max(0, Math.min(Number(atSec) || 0,
+                                       Math.max(0, (audio.duration || 0) - 5)))
     })
   }
 
@@ -97,26 +103,54 @@ Panel {
   // length from the slot it occupies, so the file's end says nothing about
   // when the broadcast ends. Reaching the present in such a programme means
   // the live feed has caught up, and rejoining it is what the listener wants.
+  // Is there anything scheduled before what is playing? Cheap enough to bind,
+  // and it keeps the back controls honest about whether they can do anything.
+  readonly property bool earlierProgrammeExists: transport.windowStartMs > 0
+    && schedule.episodeBefore(transport.windowStartMs) !== null
+
   readonly property bool programmeStillOnAir: player.mode === "ondemand"
     && schedule.currentStartMs > 0
     && Math.abs(player.originWallMs - schedule.currentStartMs) < 60000
     && schedule.currentEndMs > player.nowMs
 
+  // Go to a moment in the broadcast, whichever programme it falls in.
+  //
+  // The schedule is treated as one continuous timeline, so a target outside
+  // the programme being heard is looked up and played from the right offset --
+  // that is what lets a step back from the start of a programme land near the
+  // end of the one before it.
   function seekToWall(wallMs) {
     if (!player.active) return
+
     // Asking for the present, in a programme that is still on air, is asking
     // to rejoin the broadcast.
     if (programmeStillOnAir && wallMs >= player.liveWallMs - 2000) {
       returnToLive()
       return
     }
-    if (player.mode === "ondemand" || wallMs >= player.seekableStartWallMs - 500) {
-      player.seekToWall(wallMs)
+
+    var inThisProgramme = transport.windowEndMs > 0
+      && wallMs >= transport.windowStartMs
+      && wallMs < transport.windowEndMs
+
+    if (inThisProgramme) {
+      if (player.mode === "ondemand" || wallMs >= player.seekableStartWallMs - 500) {
+        player.seekToWall(wallMs)
+        return
+      }
+      // Live, but older than the buffer holds: the published file has it.
+      var current = schedule.currentAudio
+      if (current) playProgramme(current, (wallMs - current.startMs) / 1000)
+      else player.seekToWall(wallMs)   // clamps to the oldest buffered moment
       return
     }
-    var audio = schedule.currentAudio
-    if (audio) playProgramme(audio, (wallMs - audio.startMs) / 1000)
-    else player.seekToWall(wallMs)   // clamps to the oldest buffered moment
+
+    var episode = schedule.episodeAt(wallMs)
+    if (!episode) { player.seekToWall(wallMs); return }
+    schedule.resolveAudio(episode.id, episode.startMs, episode.title, function(audio) {
+      if (audio) playProgramme(audio, (wallMs - audio.startMs) / 1000)
+      else player.seekToWall(wallMs)   // nothing published; clamp where we are
+    })
   }
 
   function seekBy(seconds) {
@@ -131,14 +165,15 @@ Panel {
       player.seekRelative(seconds)
       return
     }
-    if (player.mode === "ondemand") {
+    // Going back. Seek in place while the target is both inside this
+    // programme and actually reachable; otherwise let seekToWall find whatever
+    // covers that moment, crossing into the previous programme if need be.
+    var target = player.playheadWallMs + seconds * 1000
+    if (target >= player.seekableStartWallMs && target >= transport.windowStartMs) {
       player.seekRelative(seconds)
       return
     }
-    // Going back past what the buffer holds: hand off to the published file.
-    var target = player.playheadWallMs + seconds * 1000
-    if (target >= player.seekableStartWallMs) player.seekRelative(seconds)
-    else seekToWall(target)
+    seekToWall(target)
   }
 
   // The back button: go to the beginning of the programme being heard, unless
@@ -153,6 +188,28 @@ Panel {
     if (transport.atProgrammeStart) stepToProgrammeBefore(transport.windowStartMs, 6)
     else if (player.mode !== "ondemand" && schedule.currentAudio) playCurrentProgrammeFromStart()
     else player.seekToStart()
+  }
+
+  // Advance to the programme after the one being heard. Running out of
+  // schedule, or catching up with what is on air, means rejoining the live
+  // feed -- there is nothing later to play.
+  function stepForward() {
+    if (!player.active) return
+    if (player.mode !== "ondemand") { returnToLive(); return }
+    stepToProgrammeAfter(transport.windowStartMs, 6)
+  }
+
+  function stepToProgrammeAfter(startMs, hopsLeft) {
+    if (hopsLeft <= 0) { returnToLive(); return }
+    var next = schedule.episodeAfter(startMs)
+    if (!next || (schedule.currentStartMs > 0 && next.startMs >= schedule.currentStartMs)) {
+      returnToLive()
+      return
+    }
+    schedule.resolveAudio(next.id, next.startMs, next.title, function(audio) {
+      if (audio) playProgramme(audio, 0)
+      else root.stepToProgrammeAfter(next.startMs, hopsLeft - 1)
+    })
   }
 
   // Walk back through the schedule from `startMs`, playing the first
@@ -222,9 +279,9 @@ Panel {
 
   Connections {
     target: player
-    // Reaching the end of a published programme means the broadcast has moved
-    // on without us; rejoin it rather than falling silent.
-    function onProgrammeEnded() { root.returnToLive() }
+    // A programme running out continues with the next one, just as the
+    // broadcast did -- and rejoins the live feed once it catches up.
+    function onProgrammeEnded() { root.stepForward() }
   }
 
   Schedule {
@@ -293,6 +350,10 @@ Panel {
       return "stepping back"
     }
     // Same rule the back button follows.
+    function next(): string {
+      root.stepForward()
+      return "stepping forward"
+    }
     function stepBack(): string {
       root.stepBack()
       return player.mode === "ondemand"
@@ -446,9 +507,11 @@ Panel {
           fontFamily: root.fontFamily
           fullySeekable: root.programmeFullySeekable
           canCatchUp: root.programmeStillOnAir
+          hasEarlierProgramme: root.earlierProgrammeExists
           onSeekRequested: function(wallMs) { root.seekToWall(wallMs) }
           onSeekByRequested: function(seconds) { root.seekBy(seconds) }
           onStepBackRequested: root.stepBack()
+          onStepForwardRequested: root.stepForward()
           onPlayCurrentFromStart: root.playCurrentProgrammeFromStart()
           onReturnToCurrent: root.returnToLive()
         }
