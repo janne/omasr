@@ -15,7 +15,7 @@ PASS=0; FAIL=0; SKIP=0
 CH="${OMASR_TEST_CHANNEL:-p1}"
 CHANNEL_ID="${OMASR_TEST_CHANNEL_ID:-132}"
 
-sr()      { omarchy-shell omasr "$@" 2>/dev/null; }
+sr()      { omarchy shell omasr "$@" 2>/dev/null; }
 status()  { sr status; }
 mode()    { status | sed -n 's/.*\[\([^ ]*\) .*/\1/p'; }        # live | -Ns | recorded
 clock()   { status | sed -n 's/.*at \([0-9:]*\)\]/\1/p'; }

@@ -69,18 +69,30 @@ resuming picks up where you stopped. **Direkt** returns to the live edge.
 
 ## Install
 
-The plugin is a bar widget for `omarchy-shell`, so it lives in
-`~/.config/omarchy/plugins/<plugin-id>/`. Symlink this checkout there, let the
-shell find it, and put it in the bar:
-
 ```bash
-ln -sfn "$PWD" ~/.config/omarchy/plugins/omasr.radio
-omarchy-shell shell rescanPlugins
+omarchy plugin add https://github.com/janne/omasr
 omarchy plugin enable omasr.radio --section left
 ```
 
+`plugin add` hands the URL straight to `git clone`, so it needs a real one --
+`github.com/janne/omasr` on its own is read as a local path and fails. The
+`.git` suffix is optional. Plugins land disabled so you can read the code
+first, which is why enabling is a second step.
+
 Requires **mpv** (`sudo pacman -S mpv`), which decodes the stream. The panel
 says so plainly if it is missing.
+
+### From a checkout
+
+The plugin is a bar widget for `omarchy-shell`, so it lives in
+`~/.config/omarchy/plugins/<plugin-id>/`. To run it from a working copy,
+symlink it there and let the shell find it:
+
+```bash
+ln -sfn "$PWD" ~/.config/omarchy/plugins/omasr.radio
+omarchy shell shell rescanPlugins
+omarchy plugin enable omasr.radio --section left
+```
 
 ## Settings
 
@@ -103,21 +115,21 @@ Everything is also reachable over the shell's IPC, which is what you bind
 Hyprland keys to:
 
 ```bash
-omarchy-shell omasr play p3        # tune in, no panel
-omarchy-shell omasr playPause p3   # same-channel toggle
-omarchy-shell omasr stop
-omarchy-shell omasr status         # "playing P4 Stockholm [live]" | "idle"
-omarchy-shell omasr toggle         # show/hide the panel
+omarchy shell omasr play p3        # tune in, no panel
+omarchy shell omasr playPause p3   # same-channel toggle
+omarchy shell omasr stop
+omarchy shell omasr status         # "playing P4 Stockholm [live]" | "idle"
+omarchy shell omasr toggle         # show/hide the panel
 
-omarchy-shell omasr pause          # play/pause
-omarchy-shell omasr back 30        # seconds, default 15
-omarchy-shell omasr forward 30
-omarchy-shell omasr live           # back to the live broadcast
-omarchy-shell omasr stepBack       # what the |< button does
-omarchy-shell omasr fromStart      # the current programme from its start
-omarchy-shell omasr restart        # to the start of the buffer
-omarchy-shell omasr previous       # step back one programme
-omarchy-shell omasr next           # step forward one programme
+omarchy shell omasr pause          # play/pause
+omarchy shell omasr back 30        # seconds, default 15
+omarchy shell omasr forward 30
+omarchy shell omasr live           # back to the live broadcast
+omarchy shell omasr stepBack       # what the |< button does
+omarchy shell omasr fromStart      # the current programme from its start
+omarchy shell omasr restart        # to the start of the buffer
+omarchy shell omasr previous       # step back one programme
+omarchy shell omasr next           # step forward one programme
 ```
 
 ## How it works
@@ -143,7 +155,7 @@ when they move things around. The timeline comes from
 
 **Switching to a file.** The handoff uses mpv's `--start`, so the file opens at
 the right moment rather than opening at zero and seeking afterwards, which
-would be audible. `omarchy-shell omasr status` reports the playhead as a clock
+would be audible. `omarchy shell omasr status` reports the playhead as a clock
 time, so it can be followed across a handoff.
 
 **Walking the schedule.** Stepping between programmes needs the schedule
@@ -187,7 +199,7 @@ looks exactly like the panel having gone dead. The retry loop is therefore
 bound to "there is a child and no usable channel" rather than started and
 stopped by hand, so it re-arms itself if a connection is ever lost, and a
 connection is only treated as usable once the property subscriptions are
-actually on it. `omarchy-shell omasr status` reports `seek` or `NOSEEK` so
+actually on it. `omarchy shell omasr status` reports `seek` or `NOSEEK` so
 this is visible rather than guessed at.
 
 Each attempt gets a **fresh** `Socket`. Quickshell's latches its connect

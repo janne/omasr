@@ -28,7 +28,7 @@ Everything follows from there being two ways to hear a programme:
 The DVR window is preferred wherever it reaches, since it does not depend on
 SR having published anything.
 
-`omarchy-shell omasr status` reports which source is playing:
+`omarchy shell omasr status` reports which source is playing:
 
     playing P1 [live seek at 14:27:50]        live, on the live edge
     playing P1 [-19s seek at 14:27:31]        live, 19s behind
