@@ -21,9 +21,10 @@ Once something is playing, the transport appears.
   broadcast start and end. Click or drag anywhere in it to seek. The bright
   section is what can actually be reached; a second, dimmer marker shows where
   live has got to once you are behind it.
-- **↺ 15 / ↻ 15** jump a quarter minute either way. Each is dimmed when there
-  is nothing to move towards: forward while you are live, back once you reach
-  the start of the buffer or of a programme.
+- **↺ 15 / ↻ 15** jump a quarter minute either way, and are dimmed when there
+  is nothing to move towards. Forward never runs past what has actually been
+  broadcast: step forward off the end of a programme still on air and it
+  rejoins the live feed rather than walking into the future.
 - **|◀** goes to the beginning of the programme you are hearing. Press it again
   within three seconds and it steps back to the programme before that — the
   convention every music player uses. Keep pressing and it keeps walking back
@@ -173,6 +174,21 @@ stopped by hand, so it re-arms itself if a connection is ever lost, and a
 connection is only treated as usable once the property subscriptions are
 actually on it. `omarchy-shell omasr status` reports `seek` or `NOSEEK` so
 this is visible rather than guessed at.
+
+Each attempt gets a **fresh** `Socket`. Quickshell's latches its connect
+request: once `connected = true` has been asked for and the attempt failed --
+which the first one usually does, in the moment before mpv has created the
+socket -- asking again does nothing, and neither toggling the property nor
+reassigning the path clears it. Recreating the object is the only way to
+genuinely retry.
+
+**End of a programme.** A published file running out is a normal end, not a
+dropped stream, so it rejoins the live broadcast instead of being retried.
+Whether a programme is still on air comes from the schedule rather than the
+file's length: SR often fills a slot with a repeat whose file is a different
+length from the slot it occupies, so the file's end says nothing about when
+the broadcast ends. Seeks also stay a few seconds clear of the end of a file,
+because seeking onto EOF ends playback.
 
 **Seeking.** mpv runs with a JSON IPC socket. Rather than polling it, the
 player asks mpv to push the properties the transport needs (`time-pos`,

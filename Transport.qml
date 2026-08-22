@@ -58,7 +58,8 @@ Item {
   // programme. Forward only exists while we are behind live.
   readonly property bool canStepBack: ready
   readonly property bool canStepForward: ready && (onDemand || !isLive)
-  readonly property bool canForward15: ready && !isLive && player.behindLiveSec > 1.5
+  readonly property bool canForward15: ready && !isLive
+    && (player.behindLiveSec > 1.5 || canCatchUp)
   // Nothing behind the playhead means the button would silently do nothing,
   // so dim it rather than let it look broken. How far back "behind" reaches
   // depends on whether the programme can be switched to as a file.
@@ -78,6 +79,9 @@ Item {
   // file is playing or one exists to switch to. Otherwise only what the live
   // buffer holds is reachable.
   property bool fullySeekable: false
+  // Forwarding off the end of this programme rejoins the live broadcast, so
+  // the button stays available right up to the present.
+  property bool canCatchUp: false
 
   // Where "the beginning of this programme" actually lands. A published file
   // starts at the programme's real start; a live stream can only go back as

@@ -90,8 +90,26 @@ Panel {
   readonly property bool programmeFullySeekable: player.mode === "ondemand"
     || !!schedule.currentAudio
 
+  // Playing the file of the programme that is on air right now.
+  //
+  // Whether it is still running comes from the schedule, not from the file's
+  // length: SR often fills a slot with a repeat whose file is a different
+  // length from the slot it occupies, so the file's end says nothing about
+  // when the broadcast ends. Reaching the present in such a programme means
+  // the live feed has caught up, and rejoining it is what the listener wants.
+  readonly property bool programmeStillOnAir: player.mode === "ondemand"
+    && schedule.currentStartMs > 0
+    && Math.abs(player.originWallMs - schedule.currentStartMs) < 60000
+    && schedule.currentEndMs > player.nowMs
+
   function seekToWall(wallMs) {
     if (!player.active) return
+    // Asking for the present, in a programme that is still on air, is asking
+    // to rejoin the broadcast.
+    if (programmeStillOnAir && wallMs >= player.liveWallMs - 2000) {
+      returnToLive()
+      return
+    }
     if (player.mode === "ondemand" || wallMs >= player.seekableStartWallMs - 500) {
       player.seekToWall(wallMs)
       return
@@ -103,7 +121,17 @@ Panel {
 
   function seekBy(seconds) {
     if (!player.active) return
-    if (seconds > 0 || player.mode === "ondemand") {
+    if (seconds > 0) {
+      // Stepping forward off the end of what has been broadcast means the
+      // live feed has caught up: join it rather than stopping short of it.
+      if (programmeStillOnAir && player.behindLiveSec - 1.0 <= seconds) {
+        returnToLive()
+        return
+      }
+      player.seekRelative(seconds)
+      return
+    }
+    if (player.mode === "ondemand") {
       player.seekRelative(seconds)
       return
     }
@@ -190,6 +218,13 @@ Panel {
   Player {
     id: player
     clientName: "Sveriges Radio"
+  }
+
+  Connections {
+    target: player
+    // Reaching the end of a published programme means the broadcast has moved
+    // on without us; rejoin it rather than falling silent.
+    function onProgrammeEnded() { root.returnToLive() }
   }
 
   Schedule {
@@ -410,6 +445,7 @@ Panel {
           foreground: root.foreground
           fontFamily: root.fontFamily
           fullySeekable: root.programmeFullySeekable
+          canCatchUp: root.programmeStillOnAir
           onSeekRequested: function(wallMs) { root.seekToWall(wallMs) }
           onSeekByRequested: function(seconds) { root.seekBy(seconds) }
           onStepBackRequested: root.stepBack()

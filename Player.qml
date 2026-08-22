@@ -54,6 +54,10 @@ Item {
 
   readonly property bool active: channelKey !== ""
 
+  // A published programme played through to its end. Not a failure -- the
+  // panel decides what to do next, which is to rejoin the live broadcast.
+  signal programmeEnded()
+
   // Name shown to the system mixer, so the stream is identifiable in
   // Omarchy's audio panel and in pavucontrol.
   property string clientName: "Sveriges Radio"
@@ -90,10 +94,26 @@ Item {
   // the moment that episode started broadcasting.
   property double originWallMs: 0
 
+  // Wall clock, ticked while something is playing so that bindings depending
+  // on "now" -- chiefly how far forward it is possible to go -- stay live.
+  property double nowMs: Date.now()
+
   readonly property double playheadWallMs: originWallMs + timePos * 1000
-  readonly property double liveWallMs: mode === "live"
-    ? originWallMs + cacheEnd * 1000
-    : originWallMs + duration * 1000
+
+  // The furthest point that can be reached.
+  //
+  // On a live stream that is the head of the cache. In a published file it is
+  // the end of the file -- except for a programme that is still on air, where
+  // the file's duration is its *scheduled* length and runs into the future.
+  // Audio that has not been broadcast yet cannot be played, so the present
+  // moment is the real limit.
+  // Stay a couple of seconds clear of the end of a file: seeking onto EOF
+  // ends playback, and mpv exiting there looks exactly like a dropped stream.
+  readonly property real reachableEndSec: mode === "live"
+    ? Math.max(0, cacheEnd - 0.5)
+    : Math.max(0, Math.min(duration - 5, (nowMs - originWallMs) / 1000))
+
+  readonly property double liveWallMs: originWallMs + reachableEndSec * 1000
   // Oldest point we could seek back to.
   readonly property double seekableStartWallMs: originWallMs + cacheBegin * 1000
 
@@ -188,9 +208,11 @@ Item {
 
   function seekRelative(seconds) {
     if (!canSeek) return
-    // Never let a forward seek run past the live edge: mpv would sit at the
-    // cache head with the playhead pinned, which reads as a hang.
-    if (seconds > 0 && mode === "live") {
+    // Never let a forward seek run past what has actually been broadcast --
+    // in either mode. On a live stream mpv would sit at the cache head with
+    // the playhead pinned, which reads as a hang; in a programme still on air
+    // it would step into a part of the file that does not exist yet.
+    if (seconds > 0) {
       var room = behindLiveSec - 1.0
       if (room <= 0) return
       seconds = Math.min(seconds, room)
@@ -204,7 +226,7 @@ Item {
     if (!canSeek) return
     var target = (wallMs - originWallMs) / 1000
     var lo = Math.max(0, cacheBegin)
-    var hi = mode === "live" ? Math.max(lo, cacheEnd - 0.5) : Math.max(lo, duration)
+    var hi = Math.max(lo, reachableEndSec)
     var clamped = Math.max(lo, Math.min(hi, target))
     // Scrubbing to within a couple of seconds of the head counts as going back
     // to live, so the lamp lights up rather than leaving a Direkt button that
@@ -368,6 +390,19 @@ Item {
         return
       }
 
+      // A file that ran out is finished, not dropped. Reconnecting would
+      // restart it at the same offset and immediately end again.
+      //
+      // Announced on the next turn of the event loop, not from inside this
+      // handler: whatever the panel does next will almost certainly start
+      // playing something, and `proc.running` is still true until this
+      // handler returns -- so the request would park in `_pendingSource`
+      // waiting for an exit that has already happened.
+      if (root.mode === "ondemand" && exitCode === 0) {
+        Qt.callLater(function() { root.programmeEnded() })
+        return
+      }
+
       // Died on its own. Reconnect while we have attempts left, otherwise
       // surface the failure and go quiet.
       if (root.channelKey !== "" && root._reconnects < root.maxReconnects) {
@@ -387,6 +422,13 @@ Item {
         root._resetTransport()
       }
     }
+  }
+
+  Timer {
+    running: root.active
+    interval: 500
+    repeat: true
+    onTriggered: root.nowMs = Date.now()
   }
 
   Timer {
@@ -415,24 +457,26 @@ Item {
       { id: 5, name: "demuxer-cache-state" }
     ]
 
+    // Throw away the current socket and stand up a clean one.
+    function rebuild() {
+      sockLoader.active = false
+      sockLoader.active = true
+    }
+
     function beginConnect() {
       ready = false
-      // Drop the previous child's connection before pointing at the new
-      // socket. Disconnecting is asynchronous, so `connected` can still be
-      // true for a moment afterwards -- which is why nothing below ever
-      // treats `connected` on its own as "usable".
-      sock.connected = false
-      sock.path = socketPath
+      // Start from a clean socket rather than the previous child's.
+      rebuild()
     }
 
     function teardown() {
       ready = false
-      sock.connected = false
-      sock.path = ""
+      sockLoader.active = false
     }
 
     function command(args) {
-      if (!sock.connected) return
+      var sock = sockLoader.item
+      if (!sock || !sock.connected) return
       sock.write(JSON.stringify({ command: args }) + "\n")
       sock.flush()
     }
@@ -472,56 +516,59 @@ Item {
     }
   }
 
-  Socket {
-    id: sock
-    // Only a connection to the socket we are currently interested in counts.
-    // A connection left over from the previous child reports `connected` too,
-    // and subscribing on that would leave us "ready" against a dead mpv.
-    onConnectedChanged: {
-      if (connected && path === ipc.socketPath && ipc.socketPath !== "") ipc.onConnected()
-      else if (!connected) ipc.ready = false
-    }
-    parser: SplitParser {
-      onRead: function(line) { ipc.handle(line) }
+  // A Socket per connection attempt.
+  //
+  // Quickshell's Socket latches its connect request: once `connected = true`
+  // has been asked for and the attempt failed -- which the first attempt
+  // usually does, before mpv has created the socket -- asking again changes
+  // nothing and no further attempt is ever made. Toggling the property or
+  // reassigning the path does not clear it either. So each retry gets a fresh
+  // object, which is the only reliable way to actually try again.
+  Component {
+    id: socketComponent
+
+    Socket {
+      onConnectedChanged: {
+        if (connected && path === ipc.socketPath && ipc.socketPath !== "") ipc.onConnected()
+        else if (!connected) ipc.ready = false
+      }
+      parser: SplitParser {
+        onRead: function(line) { ipc.handle(line) }
+      }
     }
   }
 
+  Loader {
+    id: sockLoader
+    active: false
+    sourceComponent: socketComponent
+  }
+
   // Keeps trying until there is a usable control channel, and starts itself
-  // again if one is ever lost. Bound rather than started by hand: an earlier
-  // version stopped as soon as the socket reported `connected`, which a stale
-  // connection from the previous child satisfied instantly -- so the
-  // subscriptions were never placed, `ready` stayed false, and every
-  // transport control sat disabled and dimmed for the rest of the session.
+  // again if one is ever lost.
   Timer {
     id: connectTimer
-    interval: connectTimer.attempts < 25 ? 200 : 1000
+    interval: connectTimer.attempts < 25 ? 250 : 1000
     repeat: true
     running: proc.running && ipc.socketPath !== "" && !ipc.ready
     property int attempts: 0
     onRunningChanged: if (running) attempts = 0
     onTriggered: {
       attempts++
-      if (sock.connected) {
-        // Connected, but not ready. Either this is the right socket and we
-        // missed the change signal, or it is the previous child's and has to
-        // go before we can reach the new one.
+      var sock = sockLoader.item
+      if (sock && sock.connected) {
+        // Connected, but not ready: either this is the right socket and the
+        // change signal was missed, or it belongs to the previous child.
         if (sock.path === ipc.socketPath) ipc.onConnected()
-        else sock.connected = false
+        else ipc.rebuild()
         return
       }
+      ipc.rebuild()
+      sock = sockLoader.item
+      if (!sock) return
       sock.path = ipc.socketPath
       sock.connected = true
     }
-  }
-
-  // Sweep stale IPC sockets left by a shell that was killed rather than shut
-  // down: mpv unlinks its own socket on a clean exit, but the shell takes its
-  // children with it when it goes, so nothing gets the chance. Safe at
-  // startup precisely because no mpv of ours can still be running.
-  Process {
-    running: true
-    command: ["sh", "-c",
-      "rm -f \"${XDG_RUNTIME_DIR:-/tmp}\"/omasr-mpv-*.sock"]
   }
 
   // One-shot probe so the panel can say "mpv isn't installed" rather than
