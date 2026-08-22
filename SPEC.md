@@ -17,6 +17,11 @@ Everything follows from there being two ways to hear a programme:
   seconds. An instant inside a segment rounds *up*, to the boundary at or after
   it: going to a programme's start may miss a few seconds of its opening, but
   never opens with the end of the programme before it.
+
+  Position is measured back from the **live edge**, not forward from the
+  playlist's `EXT-X-PROGRAM-DATE-TIME`. SR's stamp runs about half a minute
+  ahead of real time, and taking it at face value put every jump that far
+  early.
 - **recorded** — a file SR has published for a programme. Seekable throughout,
   and the only way back beyond the DVR window.
 

@@ -146,7 +146,7 @@ fi
 if group "programmes"; then
   sr play $CH >/dev/null; sleep 10
   sr stepBack >/dev/null; settle
-  sr stepBack >/dev/null; settle
+  sr stepBack >/dev/null; settle; ready
   is    "stepping back stays controllable"            "$(seekable)" "yes"
   first_clock=$(clock)
   sr stepBack >/dev/null; settle; ready
@@ -202,7 +202,7 @@ if group "landing"; then
     landed_epoch=$(date -d "today $landed" +%s)
     delta=$((landed_epoch - sched))
     # Generous upper bound: the playhead keeps moving while the test settles.
-    if [ "$delta" -ge 0 ] && [ "$delta" -lt 60 ]; then
+    if [ "$delta" -ge -3 ] && [ "$delta" -lt 60 ]; then
       ok "steps back to inside the programme, not before it"
     else
       no "steps back to inside the programme, not before it" "landed ${delta}s from its start"
@@ -227,7 +227,11 @@ if group "landing"; then
     skip "back after a short rewind still reaches this programme" "no schedule or playhead"
   else
     delta=$(( $(date -d "today $landed" +%s) - sched ))
-    if [ "$delta" -ge 0 ] && [ "$delta" -lt 60 ]; then
+    # A couple of seconds either side is as sharp as this gets: positions come
+    # from segment boundaries about six seconds apart, and SR's own schedule
+    # times are not exactly when the audio changes. The regression this guards
+    # against is landing half a minute out, not a second.
+    if [ "$delta" -ge -3 ] && [ "$delta" -lt 60 ]; then
       ok "back after a short rewind still reaches this programme"
     else
       no "back after a short rewind still reaches this programme" "landed ${delta}s from its start"

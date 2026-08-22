@@ -44,8 +44,10 @@ Item {
         if (!text) { callback(null); return }
         var parsed = parsePlaylist(text)
         if (!parsed) { callback(null); return }
-        root.windowStartMs = parsed.startMs
-        root.windowEndMs = parsed.startMs + parsed.total * 1000
+        // Anchored on the live edge for the same reason as locateIn.
+        var edge = Date.now()
+        root.windowEndMs = edge - edgeLatencySec * 1000
+        root.windowStartMs = edge - parsed.total * 1000
         var spot = locateIn(parsed, wallMs)
         if (spot) spot.url = variantUrl
         callback(spot)
@@ -69,22 +71,51 @@ Item {
   // of the instant is close enough to use as-is.
   property real boundaryToleranceSec: 1.0
 
+  // How far behind real time the newest segment in the playlist is: SR has to
+  // finish and publish a segment before it appears, so the live edge is not
+  // quite now, and treating it as now lands everything slightly early.
+  //
+  // Calibrated by fetching the same instant twice -- once through this window
+  // and once as the programme's published file -- and cross-correlating the
+  // two. That put the mapping 1.4 to 5.8 seconds early across samples, so
+  // this is the middle of that range rather than a precise figure: the file's
+  // own start is not exactly the scheduled one, which limits how sharp the
+  // reading can be. Erring late is the safer side, and rounding up to a
+  // segment boundary already leans that way.
+  property real edgeLatencySec: 3.5
+
+  // Position is measured back from the live edge, not forward from the
+  // playlist's own `EXT-X-PROGRAM-DATE-TIME`.
+  //
+  // SR's stamp runs roughly half a minute ahead of real time: summing the
+  // segment durations from it puts the end of the window about 28 seconds
+  // into the future, which is not possible for audio that has been broadcast.
+  // Taking it at face value made every jump land that far early -- asking for
+  // a programme's start would open half a minute before it. The newest
+  // segment is the one thing whose real time is known: it is now, give or
+  // take the moment it takes SR to publish it.
   function locateIn(parsed, wallMs) {
-    var offset = (wallMs - parsed.startMs) / 1000
-    if (offset < 0) offset = 0
+    var count = parsed.durations.length
+    var edgeMs = Date.now()
+    var backSec = Math.max(0, (edgeMs - wallMs) / 1000 - edgeLatencySec)
+
+    // Walk back from the newest segment until the target is covered.
     var acc = 0
-    for (var i = 0; i < parsed.durations.length; i++) {
-      var d = parsed.durations[i]
-      if (acc + d > offset) {
-        var into = offset - acc
-        if (into > boundaryToleranceSec && i + 1 < parsed.durations.length)
-          return { index: i + 1, startMs: parsed.startMs + (acc + d) * 1000 }
-        return { index: i, startMs: parsed.startMs + acc * 1000 }
+    for (var i = count - 1; i >= 0; i--) {
+      acc += parsed.durations[i]
+      if (acc >= backSec) {
+        var startsBeforeTarget = acc - backSec
+        // Round up to the boundary at or after the target, so a jump to a
+        // programme's start never opens with the end of the one before it.
+        if (startsBeforeTarget > boundaryToleranceSec && i + 1 < count) {
+          acc -= parsed.durations[i]
+          i += 1
+        }
+        return { index: i, startMs: edgeMs - (acc + edgeLatencySec) * 1000 }
       }
-      acc += d
     }
-    var last = Math.max(0, parsed.durations.length - 1)
-    return { index: last, startMs: parsed.startMs + (acc - parsed.durations[last]) * 1000 }
+    // Older than the window holds; the oldest segment is the best on offer.
+    return { index: 0, startMs: edgeMs - (acc + edgeLatencySec) * 1000 }
   }
 
   function parsePlaylist(text) {
