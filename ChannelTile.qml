@@ -23,6 +23,7 @@ Item {
 
   property bool playing: false
   property bool connecting: false
+  property bool paused: false
   // Some other channel is the active one.
   property bool backgrounded: false
   property bool hasCursor: false
@@ -66,7 +67,8 @@ Item {
     }
 
     // Running equalizer in the corner, so the playing tile reads as playing
-    // even in a screenshot-still panel. Held static while connecting.
+    // even in a screenshot-still panel. Held static while connecting, and
+    // settled flat while paused.
     Row {
       id: meter
       visible: root.active
@@ -80,15 +82,18 @@ Item {
       Repeater {
         model: 3
         delegate: Rectangle {
+          id: level
           required property int index
+          readonly property real resting: Math.max(3, Style.space(4))
           width: Math.max(2, Style.space(3))
           radius: width / 2
           color: "#ffffff"
           anchors.bottom: parent.bottom
-          height: Math.max(3, Style.space(4))
+          height: resting
 
           SequentialAnimation on height {
-            running: root.playing
+            id: bounce
+            running: root.playing && !root.paused
             loops: Animation.Infinite
             // Stagger the bars so they read as a level meter rather than
             // three things blinking in unison.
@@ -97,6 +102,17 @@ Item {
             NumberAnimation { to: Style.space(4);  duration: 320; easing.type: Easing.InOutSine }
             NumberAnimation { to: Style.space(11); duration: 300; easing.type: Easing.InOutSine }
             NumberAnimation { to: Style.space(5);  duration: 420; easing.type: Easing.InOutSine }
+          }
+
+          // Animating a property replaces its binding for good, so stopping
+          // the meter leaves the bar at whatever height it had reached. Settle
+          // them level instead: a paused tile should look deliberately still,
+          // not frozen mid-bounce.
+          Connections {
+            target: bounce
+            function onRunningChanged() {
+              if (!bounce.running) level.height = level.resting
+            }
           }
         }
       }

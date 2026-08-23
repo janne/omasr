@@ -564,6 +564,7 @@ Panel {
               fontFamily: root.fontFamily
               playing: player.channelKey === modelData.key && player.status === "playing"
               connecting: player.channelKey === modelData.key && player.status === "connecting"
+              paused: player.paused
               backgrounded: player.active && player.channelKey !== modelData.key
               hasCursor: root.cursorActive && root.cursorIndex === index
               onHoveringChanged: root.hoveredStation = hovering ? modelData.station : ""

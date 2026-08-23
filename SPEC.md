@@ -130,6 +130,9 @@ must not blink.
 Pauses. On a live stream this is itself a time shift: the broadcast carries on
 without you and resuming picks up where you stopped.
 
+The playing channel's level meter settles flat while paused, rather than
+carrying on or freezing part-way through a bounce.
+
 ## Rules that hold everywhere
 
 1. **One mpv process.** Never two, never zero while something is playing.
