@@ -61,6 +61,17 @@ Item {
   // What MPRIS -- and so the media keys and the bar's now-playing widget --
   // calls this. Follows the programme once one is known.
   property string mediaTitle: ""
+  // Name what is about to play, on the process that is still running.
+  //
+  // A step between programmes replaces the whole player, and whatever asked
+  // for it -- the media keys, say -- is showing a notification within about a
+  // second. A replacement takes longer than that to appear on the bus, so the
+  // outgoing one carries the announcement.
+  function announceTitle(title) {
+    if (!canSeek || !title) return
+    ipc.command(["set_property", "force-media-title", title])
+  }
+
   function pushMediaTitle() {
     if (canSeek && mediaTitle !== "")
       ipc.command(["set_property", "force-media-title", mediaTitle])

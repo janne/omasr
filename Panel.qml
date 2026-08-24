@@ -270,11 +270,25 @@ Panel {
   // it. The DVR window is tried first: it covers every programme inside it,
   // published or not, which a file lookup does not.
   function playProgrammeAt(episode, onUnavailable) {
-    if (liveWindow.covers(episode.startMs)) { playLiveFrom(episode.startMs); return }
+    if (liveWindow.covers(episode.startMs)) {
+      player.announceTitle(programmeLabel(episode.title))
+      playLiveFrom(episode.startMs)
+      return
+    }
     schedule.resolveAudio(episode.id, episode.startMs, episode.title, function(audio) {
-      if (audio) playProgramme(audio, 0)
-      else onUnavailable()
+      if (audio) {
+        player.announceTitle(root.programmeLabel(audio.title))
+        playProgramme(audio, 0)
+      } else {
+        onUnavailable()
+      }
     })
+  }
+
+  // How a programme is named on MPRIS, and so in the notification the media
+  // keys raise.
+  function programmeLabel(title) {
+    return title && title !== "" ? player.station + " — " + title : player.station
   }
 
   // Walk back through the schedule from `startMs`, playing the first
@@ -306,7 +320,10 @@ Panel {
     // long pause, even a plain live player's cache sits far behind the clock.
     // All three have to be re-tuned rather than seeked.
     if (player.canReachLive) player.goLive()
-    else if (playingTile) player.play(playingTile)
+    else if (playingTile) {
+      player.announceTitle(programmeLabel(schedule.currentTitle))
+      player.play(playingTile)
+    }
   }
 
   function indexOfKey(key) {

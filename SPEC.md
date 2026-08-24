@@ -132,7 +132,9 @@ appears in the bar's now-playing widget, named after the programme.
 
 - Play/pause pauses. That is a time shift like any other, taken from mpv
   rather than from whoever asked for it.
-- The skip buttons step between programmes, exactly as |◀ and ▶| do.
+- The skip buttons step between programmes, exactly as |◀ and ▶| do. The
+  notification they raise names the programme being stepped to, rather than
+  falling back to "Previous" or "Next".
 
 ### Play / pause
 

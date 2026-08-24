@@ -269,6 +269,12 @@ an invalid bus name -- which does not merely skip MPRIS, it takes the script
 down and leaves mpv idle, playing nothing. Hence `Sveriges-Radio` rather than
 two words.
 
+Whatever raises a notification for a skip -- the media keys do -- reads the
+player's title within about a second, which is less time than replacing the
+process takes. So the outgoing player is told the name of the programme being
+stepped to before it is replaced, and the notification names it instead of
+falling back to "Previous".
+
 And it offers Next and Previous only when mpv's playlist has somewhere to go,
 so the skip buttons were dead on a single entry. mpv is therefore given the
 same stream three times and told to play the middle one. Moving off the middle
