@@ -52,6 +52,24 @@ Item {
   // letting every button press quietly do nothing.
   property bool available: true
 
+  // mpv-mpris, which Omarchy installs alongside mpv. Loading it puts the radio
+  // on the MPRIS bus, which is what the media keys already talk to -- so they
+  // control it without touching anyone's Hyprland config. `--no-config` means
+  // it has to be asked for explicitly rather than picked up from /etc/mpv.
+  property string mprisScript: ""
+
+  // What MPRIS -- and so the media keys and the bar's now-playing widget --
+  // calls this. Follows the programme once one is known.
+  property string mediaTitle: ""
+  function pushMediaTitle() {
+    if (canSeek && mediaTitle !== "")
+      ipc.command(["set_property", "force-media-title", mediaTitle])
+  }
+  onMediaTitleChanged: pushMediaTitle()
+  // The title is usually known before the control socket is, so it has to be
+  // sent again once there is somewhere to send it.
+  onCanSeekChanged: pushMediaTitle()
+
   readonly property bool active: channelKey !== ""
 
   // A published programme played through to its end. Not a failure -- the
@@ -60,7 +78,11 @@ Item {
 
   // Name shown to the system mixer, so the stream is identifiable in
   // Omarchy's audio panel and in pavucontrol.
-  property string clientName: "Sveriges Radio"
+  //
+  // No spaces: mpv-mpris builds its D-Bus name from this, and a space makes an
+  // invalid bus name. That does not merely skip MPRIS -- the failed assertion
+  // takes the script down and leaves mpv sitting idle, playing nothing.
+  property string clientName: "Sveriges-Radio"
 
   // How far back the transport can rewind. 64 MiB is roughly an hour of SR's
   // ~128 kbps streams, which covers a typical programme. It is a ceiling, not
@@ -104,6 +126,14 @@ Item {
   property double nowMs: Date.now()
 
   readonly property double playheadWallMs: originWallMs + timePos * 1000
+
+  // Wall-clock time of the newest audio this player actually holds. After the
+  // machine sleeps, or a long pause, this sits far behind the clock: the
+  // player cannot reach live by seeking and has to be re-tuned.
+  readonly property double cacheHeadWallMs: originWallMs + cacheEnd * 1000
+  readonly property bool canReachLive: mode === "live"
+    && !dvrStarted
+    && (nowMs - cacheHeadWallMs) < 15000
 
   // The furthest point that can be reached.
   //
@@ -355,6 +385,7 @@ Item {
       "--idle=no",
       "--quiet",
       "--audio-client-name=" + clientName,
+      "--force-media-title=" + (mediaTitle !== "" ? mediaTitle : (_source.station || clientName)),
       "--term-playing-msg=@omasr-playing",
       // The back-cache is what makes rewinding a live stream possible at all.
       "--cache=yes",
@@ -367,6 +398,7 @@ Item {
     if (startAt > 0) proc.command = proc.command.concat(["--start=" + startAt.toFixed(2)])
     // Begin at a chosen point in the live DVR window. ffmpeg will not seek
     // inside a live playlist, but it will start at a given segment.
+    if (mprisScript !== "") proc.command = proc.command.concat(["--script=" + mprisScript])
     if (isFinite(startIndex) && startIndex >= 0)
       proc.command = proc.command.concat(
         ["--demuxer-lavf-o=live_start_index=" + Math.round(startIndex)])
@@ -455,11 +487,21 @@ Item {
     }
   }
 
+  // Anything that was true about the clock before the machine slept is stale
+  // afterwards. There is no need for a suspend signal to notice: this tick
+  // stops with everything else, so an interval far longer than its own is the
+  // wall clock having jumped.
+  signal wokeFromSuspend()
+
   Timer {
     running: root.active
     interval: 500
     repeat: true
-    onTriggered: root.nowMs = Date.now()
+    onTriggered: {
+      var previous = root.nowMs
+      root.nowMs = Date.now()
+      if (previous > 0 && root.nowMs - previous > 30000) root.wokeFromSuspend()
+    }
   }
 
   // Once stopped, clear any socket a child left behind -- one killed mid-switch
@@ -546,6 +588,9 @@ Item {
           if (typeof d === "number") root.cacheEnd = d
           break
         case "pause":
+          // Pausing is a time shift whoever asks for it -- the media keys go
+          // straight to mpv over MPRIS, never through togglePause().
+          if (!!d && !root.paused && root.mode === "live") root.timeShifted = true
           root.paused = !!d
           break
         case "duration":
@@ -623,6 +668,18 @@ Item {
     running: true
     command: ["sh", "-c", "command -v mpv"]
     onExited: function(exitCode) { root.available = exitCode === 0 }
+  }
+
+  Process {
+    id: mprisCheck
+    running: true
+    command: ["sh", "-c",
+      "for p in /etc/mpv/scripts/mpris.so /usr/lib/mpv-mpris/mpris.so; do "
+      + "[ -e \"$p\" ] && { printf %s \"$p\"; exit 0; }; done; exit 1"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.mprisScript = String(text || "").trim()
+    }
   }
 
   // The shell outlives any one panel; never leave a stream playing behind a

@@ -28,6 +28,8 @@ Panel {
   // opening the panel with the mouse doesn't show a ring nobody asked for.
   property int cursorIndex: 0
   property bool cursorActive: false
+  // Set for the instant between Enter's two signals; see the key catcher.
+  property bool enterPressed: false
 
   readonly property bool tintBarIcon: setting("barIcon", "Channel color") === "Channel color"
   readonly property color playingColor: {
@@ -298,11 +300,13 @@ Panel {
     // A published file has no live edge, and a live player started inside the
     // DVR window has a cache that begins where it started -- both have to be
     // re-tuned.
-    if (player.mode === "ondemand" || player.dvrStarted) {
-      if (playingTile) player.play(playingTile)
-    } else {
-      player.goLive()
-    }
+    // Seeking to the live edge only works for a player still following it.
+    // A published file has no live edge; one started inside the DVR window has
+    // a cache beginning where it started; and after the machine sleeps, or a
+    // long pause, even a plain live player's cache sits far behind the clock.
+    // All three have to be re-tuned rather than seeked.
+    if (player.canReachLive) player.goLive()
+    else if (playingTile) player.play(playingTile)
   }
 
   function indexOfKey(key) {
@@ -338,7 +342,11 @@ Panel {
 
   Player {
     id: player
-    clientName: "Sveriges Radio"
+    clientName: "Sveriges-Radio"
+    // What the media keys and the bar's now-playing widget see.
+    mediaTitle: transport.heldTitle !== ""
+      ? player.station + " — " + transport.heldTitle
+      : player.station
   }
 
   Connections {
@@ -346,6 +354,15 @@ Panel {
     // A programme running out continues with the next one, just as the
     // broadcast did -- and rejoins the live feed once it catches up.
     function onProgrammeEnded() { root.stepForward() }
+
+    // Back from sleep: the schedule has moved on and the DVR window has slid
+    // right past what we knew of it. Refresh both, or the timeline keeps
+    // describing whatever was on when the machine went to sleep.
+    function onWokeFromSuspend() {
+      schedule.refresh()
+      schedule.loadDays()
+      liveWindow.refresh()
+    }
   }
 
   LiveWindow {
@@ -503,7 +520,19 @@ Panel {
         if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
-      onActivateRequested: root.activate(root.cursorIndex)
+      // PanelKeyCatcher emits returnRequested() just before activateRequested()
+      // for Enter, and only activateRequested() for Space -- so the flag set
+      // here is what tells them apart.
+      onReturnRequested: root.enterPressed = true
+      onActivateRequested: {
+        var wasEnter = root.enterPressed
+        root.enterPressed = false
+        // Space is play/pause, as it is in every other player. Enter keeps
+        // meaning "the channel under the cursor", and Space falls back to that
+        // when there is nothing playing to pause.
+        if (!wasEnter && player.active) player.togglePause()
+        else root.activate(root.cursorIndex)
+      }
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {

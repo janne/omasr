@@ -125,9 +125,17 @@ meaningless — so the name and picture are held rather than recomputed, and a
 seek that stays inside the same programme leaves the caption untouched. It
 must not blink.
 
+### Media keys
+
+The player is on the MPRIS bus, so the system media keys control it and it
+appears in the bar's now-playing widget, named after the programme. Pausing
+that way is a time shift like any other -- it is taken from mpv rather than
+from whoever asked.
+
 ### Play / pause
 
-Pauses. On a live stream this is itself a time shift: the broadcast carries on
+`Space` in the panel, the play/pause button, the media keys, or `omasr pause`.
+On a live stream this is itself a time shift: the broadcast carries on
 without you and resuming picks up where you stopped.
 
 The playing channel's level meter settles flat while paused, rather than
@@ -138,11 +146,14 @@ carrying on or freezing part-way through a bounce.
 1. **One mpv process.** Never two, never zero while something is playing.
 2. **The playhead never passes the present.** No seek, in either source, may
    reach audio that has not been broadcast.
-3. **The control socket recovers.** If mpv's IPC is not up, every transport
+3. **Live means live.** Direkt reaches the actual broadcast, not the head of
+   whatever the player happens to hold. After sleep, or a pause long enough
+   for the buffer to stall, that means re-tuning rather than seeking.
+4. **The control socket recovers.** If mpv's IPC is not up, every transport
    control disables together, and the retry loop keeps trying — `NOSEEK` is
    never a permanent state while a process is running.
-4. **Stopping leaves nothing behind.** No process, no socket.
-5. **A control that cannot act is dimmed** rather than silently doing nothing.
+5. **Stopping leaves nothing behind.** No process, no socket.
+6. **A control that cannot act is dimmed** rather than silently doing nothing.
 
 ## Known limits
 

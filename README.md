@@ -128,10 +128,15 @@ widget's entry in `~/.config/omarchy/shell.json`:
 
 ## Keyboard and IPC
 
-With the panel open: `1`-`4` tune directly, arrows or `hjkl` move the cursor,
-`Enter`/`Space` activates it, `s` stops, `Esc` closes. For the transport, `,`
-and `.` jump 15 seconds, `p` pauses and `d` returns to live. Middle-clicking
-the bar icon stops without opening anything.
+**The media keys work.** The player registers on MPRIS, which is what
+Omarchy's media keys already talk to, so play/pause reaches the radio without
+any Hyprland config of your own. It shows up in the bar's now-playing widget
+for the same reason, named after the programme.
+
+With the panel open: `Space` is play/pause, `1`-`4` tune directly, arrows or
+`hjkl` move the cursor, `Enter` picks the channel under it, `s` stops, `Esc`
+closes. For the transport, `,` and `.` jump 15 seconds and `d` returns to
+live. Middle-clicking the bar icon stops without opening anything.
 
 Everything is also reachable over the shell's IPC, which is what you bind
 Hyprland keys to:
@@ -253,6 +258,19 @@ pausing are what actually put you behind, and Direkt is what brings you back.
 libavcodec, not the buffer. The back-cache is a ceiling rather than an
 allocation, so it grows with how long you have been listening: roughly another
 1 MiB per minute at SR's bitrates, capped at 64 MiB, about an hour.
+
+**MPRIS.** mpv-mpris comes with Omarchy but is not loaded under `--no-config`,
+so it is asked for by name. One catch worth knowing: mpv-mpris builds its
+D-Bus name from `--audio-client-name`, and a space there makes an invalid bus
+name -- which does not merely skip MPRIS, it takes the script down and leaves
+mpv idle, playing nothing. Hence `Sveriges-Radio` rather than two words.
+
+**Sleep.** Coming back from suspend, everything the player knew about the
+clock is stale: the schedule has moved on, the DVR window has slid past what
+was known of it, and the player's own buffer is nowhere near live -- so Direkt
+re-tunes rather than seeking to a cache head that is hours behind. Suspend is
+noticed without a signal to subscribe to: the clock tick stops with everything
+else, so an interval far longer than its own means the machine slept.
 
 **Dropouts.** Live streams drop. An unexpected exit reconnects up to three
 times, 1.5s apart, before the panel gives up and reports the failure.
