@@ -128,9 +128,11 @@ must not blink.
 ### Media keys
 
 The player is on the MPRIS bus, so the system media keys control it and it
-appears in the bar's now-playing widget, named after the programme. Pausing
-that way is a time shift like any other -- it is taken from mpv rather than
-from whoever asked.
+appears in the bar's now-playing widget, named after the programme.
+
+- Play/pause pauses. That is a time shift like any other, taken from mpv
+  rather than from whoever asked for it.
+- The skip buttons step between programmes, exactly as |◀ and ▶| do.
 
 ### Play / pause
 

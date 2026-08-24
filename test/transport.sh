@@ -283,13 +283,22 @@ if group "future"; then
   sr play $CH >/dev/null; sleep 10
   sr stepBack >/dev/null; settle
   for _ in 1 2 3 4 5 6; do sr forward 900 >/dev/null; sleep 3; done
-  now_hhmm=$(date +%H:%M)
-  head=$(clock | cut -c1-5)
-  # The playhead may be live or in a recording, but never ahead of the clock.
-  if [[ "$head" > "$now_hhmm" ]]; then
-    no "the playhead never passes the present" "$head (now $now_hhmm)"
+  # Read the playhead first and the clock second, and compare to the second
+  # rather than the minute: the reading takes a moment, so sampling the other
+  # way round reports a minute boundary crossed in between as a violation.
+  head=$(clock)
+  now=$(date +%s)
+  if [ -z "$head" ]; then
+    skip "the playhead never passes the present" "no playhead"
   else
-    ok "the playhead never passes the present"
+    ahead=$(( $(epoch_near "$head" "$now") - now ))
+    # A couple of seconds of slack for the round trip; the invariant is about
+    # not reaching audio that has not been broadcast, not about exactness.
+    if [ "$ahead" -le 5 ]; then
+      ok "the playhead never passes the present"
+    else
+      no "the playhead never passes the present" "${ahead}s ahead of the clock"
+    fi
   fi
   is "and stays controllable" "$(seekable)" "yes"
 fi

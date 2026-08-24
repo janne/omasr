@@ -76,6 +76,13 @@ Item {
   // panel decides what to do next, which is to rejoin the live broadcast.
   signal programmeEnded()
 
+  // The media keys' skip buttons, arriving over MPRIS.
+  signal nextRequested()
+  signal previousRequested()
+
+  // Where mpv is in the playlist described below. Playback sits at 1.
+  property int playlistPos: 1
+
   // Name shown to the system mixer, so the stream is identifiable in
   // Omarchy's audio panel and in pavucontrol.
   //
@@ -316,6 +323,7 @@ Item {
   }
 
   function _resetTransport(startAtSec) {
+    playlistPos = 1
     timePos = Number(startAtSec) || 0
     cacheEnd = 0
     cacheBegin = 0
@@ -368,15 +376,25 @@ Item {
     var socketPath = _runtimeDir + "/omasr-mpv-" + _spawnSerial + ".sock"
 
     // Position 0 of a live stream is the moment we connect.
-    // Live normally starts at the live edge, so position 0 is "now" -- unless
-    // we deliberately started inside the DVR window, which names its own.
+    // A first guess only, for live: mpv joins an HLS stream a few segments
+    // behind its end, so position 0 is not actually now. It is corrected from
+    // the cache as soon as mpv says where it really is. A DVR start names its
+    // own origin and needs no correcting.
     originWallMs = _source.originWallMs || Date.now()
     if (mode === "ondemand") duration = _source.duration || 0
     var startAt = Number(_source.startAtSec) || 0
     var startIndex = Number(_source.startIndex)
 
+    // The same stream three times, playing the middle one.
+    //
+    // mpv-mpris offers Next and Previous only when mpv's playlist has
+    // somewhere to go, and it is the media keys' skip buttons that ask for
+    // them. A single entry leaves them greyed out and the key press
+    // unhandled. Moving off the middle entry is intercepted below and turned
+    // into a step between programmes; the entry mpv starts loading is thrown
+    // away with the process.
     proc.command = [
-      "mpv", _source.url,
+      "mpv", _source.url, _source.url, _source.url, "--playlist-start=1",
       "--no-video",
       // Ignore ~/.config/mpv: a user's own profile (forced video output,
       // a different ao, --shuffle) should not reach into the bar widget.
@@ -541,7 +559,8 @@ Item {
       { id: 2, name: "demuxer-cache-time" },
       { id: 3, name: "pause" },
       { id: 4, name: "duration" },
-      { id: 5, name: "demuxer-cache-state" }
+      { id: 5, name: "demuxer-cache-state" },
+      { id: 6, name: "playlist-pos" }
     ]
 
     // Throw away the current socket and stand up a clean one.
@@ -578,14 +597,46 @@ Item {
     function handle(payload) {
       var msg
       try { msg = JSON.parse(payload) } catch (e) { return }
-      if (!msg || msg.event !== "property-change") return
+      if (!msg) return
+
+      // Why a file stopped tells a key press from a mishap: asking for
+      // another playlist entry reports "stop", a stream failing reports
+      // "error", and a file running out reports "eof".
+      if (msg.event === "end-file") {
+        if (msg.reason === "stop" && root.playlistPos !== 1) {
+          if (root.playlistPos > 1) root.nextRequested()
+          else root.previousRequested()
+        } else if (msg.reason === "eof" && root.mode === "ondemand") {
+          Qt.callLater(function() { root.programmeEnded() })
+        }
+        return
+      }
+
+      if (msg.event !== "property-change") return
       var d = msg.data
       switch (msg.name) {
         case "time-pos":
           if (typeof d === "number") root.timePos = d
           break
         case "demuxer-cache-time":
-          if (typeof d === "number") root.cacheEnd = d
+          if (typeof d === "number") {
+            root.cacheEnd = d
+            // The newest audio mpv holds is, near enough, what is being
+            // broadcast now, so it says where position 0 falls on the clock.
+            //
+            // Kept up to date rather than measured once: a stream fills
+            // faster than it plays while it catches up to the live edge, so
+            // the cache head gains on the clock and any single reading goes
+            // stale. Left stale, the playhead drifts *ahead* of the clock and
+            // claims audio that has not been broadcast. A DVR start knows its
+            // own origin exactly and must keep it.
+            //
+            // Not while paused: the playhead is standing still by definition,
+            // and re-anchoring it against a cache that keeps filling would
+            // walk it slowly backwards.
+            if (!root.dvrStarted && root.mode === "live" && !root.paused && d > 0)
+              root.originWallMs = Date.now() - d * 1000
+          }
           break
         case "pause":
           // Pausing is a time shift whoever asks for it -- the media keys go
@@ -595,6 +646,9 @@ Item {
           break
         case "duration":
           if (typeof d === "number" && root.mode === "ondemand") root.duration = d
+          break
+        case "playlist-pos":
+          if (typeof d === "number") root.playlistPos = d
           break
         case "demuxer-cache-state":
           // `cache-begin` is null until mpv has evicted anything, in which

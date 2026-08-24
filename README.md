@@ -129,9 +129,11 @@ widget's entry in `~/.config/omarchy/shell.json`:
 ## Keyboard and IPC
 
 **The media keys work.** The player registers on MPRIS, which is what
-Omarchy's media keys already talk to, so play/pause reaches the radio without
-any Hyprland config of your own. It shows up in the bar's now-playing widget
-for the same reason, named after the programme.
+Omarchy's media keys already talk to, so they reach the radio without any
+Hyprland config of your own: play/pause pauses, and the skip buttons step
+between programmes, which is the only thing "next track" can sensibly mean on
+live radio. It shows up in the bar's now-playing widget for the same reason,
+named after the programme.
 
 With the panel open: `Space` is play/pause, `1`-`4` tune directly, arrows or
 `hjkl` move the cursor, `Enter` picks the channel under it, `s` stops, `Esc`
@@ -260,10 +262,21 @@ allocation, so it grows with how long you have been listening: roughly another
 1 MiB per minute at SR's bitrates, capped at 64 MiB, about an hour.
 
 **MPRIS.** mpv-mpris comes with Omarchy but is not loaded under `--no-config`,
-so it is asked for by name. One catch worth knowing: mpv-mpris builds its
-D-Bus name from `--audio-client-name`, and a space there makes an invalid bus
-name -- which does not merely skip MPRIS, it takes the script down and leaves
-mpv idle, playing nothing. Hence `Sveriges-Radio` rather than two words.
+so it is asked for by name. Two things about it are worth knowing.
+
+It builds its D-Bus name from `--audio-client-name`, and a space there makes
+an invalid bus name -- which does not merely skip MPRIS, it takes the script
+down and leaves mpv idle, playing nothing. Hence `Sveriges-Radio` rather than
+two words.
+
+And it offers Next and Previous only when mpv's playlist has somewhere to go,
+so the skip buttons were dead on a single entry. mpv is therefore given the
+same stream three times and told to play the middle one. Moving off the middle
+is intercepted and turned into a step between programmes; the entry mpv starts
+loading is thrown away with the process. What makes that safe is *why* the
+file stopped: asking for another entry reports `stop`, a stream failing
+reports `error`, and a file running out reports `eof` -- so a press is never
+confused with a dropout.
 
 **Sleep.** Coming back from suspend, everything the player knew about the
 clock is stale: the schedule has moved on, the DVR window has slid past what

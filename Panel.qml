@@ -358,6 +358,11 @@ Panel {
     // Back from sleep: the schedule has moved on and the DVR window has slid
     // right past what we knew of it. Refresh both, or the timeline keeps
     // describing whatever was on when the machine went to sleep.
+    // The media keys' skip buttons step between programmes, which is the only
+    // thing "next track" can sensibly mean on live radio.
+    function onNextRequested() { root.stepForward() }
+    function onPreviousRequested() { root.stepBack() }
+
     function onWokeFromSuspend() {
       schedule.refresh()
       schedule.loadDays()
