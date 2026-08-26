@@ -710,7 +710,13 @@ Panel {
             Image {
               id: coverImage
               anchors.fill: parent
-              source: transport.heldImage
+              // Gated rather than bound straight to the URL, so a failed load
+              // can be asked for again: an Image that has errored stays
+              // errored, and clearing the source and putting it back is what
+              // makes it go to the network a second time.
+              property bool wanted: true
+              property int attempts: 0
+              source: wanted ? transport.heldImage : ""
               // Loaded off the render thread, and kept so a rollover between
               // programmes does not blink. The source is 2048 wide; decoding
               // it at panel size keeps that out of memory.
@@ -718,6 +724,34 @@ Panel {
               cache: true
               fillMode: Image.PreserveAspectFit
               sourceSize.width: Math.max(64, cover.width * 2)
+
+              // A name lookup that fails -- which happens on a connection
+              // coming back up, and just after the shell restarts -- would
+              // otherwise leave the panel without a picture until the
+              // programme changed, since nothing re-requests it.
+              onStatusChanged: if (status === Image.Error && attempts < 4) coverRetry.restart()
+
+              Timer {
+                id: coverRetry
+                interval: 3000 * (coverImage.attempts + 1)
+                repeat: false
+                onTriggered: {
+                  coverImage.attempts++
+                  coverImage.wanted = false
+                  coverImage.wanted = true
+                }
+              }
+
+              Connections {
+                target: transport
+                // A different programme is a fresh start: its picture has not
+                // failed yet, whatever the last one did.
+                function onHeldImageChanged() {
+                  coverRetry.stop()
+                  coverImage.attempts = 0
+                  coverImage.wanted = true
+                }
+              }
             }
           }
         }

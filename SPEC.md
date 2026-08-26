@@ -132,6 +132,11 @@ meaningless — so the name and picture are held rather than recomputed, and a
 seek that stays inside the same programme leaves the caption untouched. It
 must not blink.
 
+A picture whose load fails is asked for again, a few times and with room
+between the attempts. A name lookup that fails -- which happens on a
+connection coming back up, and just after the shell restarts -- must not leave
+the panel bare until the programme changes.
+
 ### Media keys
 
 The player is on the MPRIS bus, so the system media keys control it and it
