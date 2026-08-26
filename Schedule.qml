@@ -115,8 +115,17 @@ Item {
     return Qt.formatDate(d, "yyyy-MM-dd")
   }
 
+  // Which day the list was fetched for, and whether a fetch is in the air.
+  // Recorded only once a load lands, so one that failed is tried again rather
+  // than remembered as done.
+  property string loadedDays: ""
+  property bool daysLoading: false
+
   function loadDays() {
-    if (channelId <= 0) { daySchedule = []; return }
+    if (channelId <= 0) { daySchedule = []; loadedDays = ""; return }
+    if (daysLoading) return
+    daysLoading = true
+    var stamp = dateStamp(0)
     var merged = []
     var pending = 2
     var id = channelId
@@ -136,8 +145,10 @@ Item {
         })
       }
       if (--pending === 0) {
+        daysLoading = false
         merged.sort(function(a, b) { return a.startMs - b.startMs })
         daySchedule = merged
+        if (merged.length > 0) loadedDays = stamp
         fillMissingArtwork(merged)
       }
     }
@@ -188,11 +199,20 @@ Item {
 
   function refresh() {
     if (channelId <= 0) { clear(); return }
+    // The day list is fetched once per channel, and a session left playing
+    // across midnight would otherwise hold yesterday and the day before it --
+    // no entry covering the moment being heard, so the stepping buttons have
+    // nowhere to walk and the caption falls back on `rightnow` alone. This
+    // poll runs at least every fifteen minutes, which is where the new day is
+    // noticed. It also picks up a first load that failed outright.
+    if (loadedDays !== dateStamp(0)) loadDays()
     var url = "https://api.sr.se/api/v2/scheduledepisodes/rightnow?channelid="
       + channelId + "&format=json"
     getJson(url, function(data) {
       var ch = data && data.channel
-      if (!ch) return
+      // A poll that failed still has to arm the next one, or one bad request
+      // freezes the schedule -- and with it the timeline -- for good.
+      if (!ch) { rescheduleRefresh(); return }
       var cur = ch.currentscheduledepisode
       var prev = ch.previousscheduledepisode
       var nxt = ch.nextscheduledepisode
@@ -284,6 +304,10 @@ Item {
   onChannelIdChanged: {
     clear()
     daySchedule = []
+    loadedDays = ""
+    // Any load still in the air belongs to the channel we just left; it drops
+    // its own answer on arrival, so it must not hold the new one off.
+    daysLoading = false
     refresh()
     loadDays()
   }
