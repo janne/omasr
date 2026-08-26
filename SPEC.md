@@ -119,6 +119,13 @@ them. Artwork comes from the schedule entry where it has one and from the
 programme otherwise; every programme has one, so it is normal for a picture to
 appear a moment after the name.
 
+**The name and the picture come from one answer**, together with the
+timeline's window, so they can never describe two different programmes.
+`rightnow` is that answer wherever it covers the playhead — it is the only
+source that reflects a schedule SR has revised since the day list was
+fetched — and the day list is the answer everywhere else, which is where a
+rollover lands in the seconds before the next poll.
+
 **They change only when the programme does.** Any seek outside what the player
 holds restarts the stream, and while that happens the playhead is briefly
 meaningless — so the name and picture are held rather than recomputed, and a

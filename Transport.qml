@@ -33,36 +33,61 @@ Item {
   readonly property var playheadEpisode: (schedule && player && player.playheadWallMs > 0)
     ? schedule.episodeAt(player.playheadWallMs) : null
 
-  readonly property bool inPreviousProgramme: !!playheadEpisode
-    && !onDemand
-    && !!schedule && schedule.currentStartMs > 0
-    && playheadEpisode.startMs < schedule.currentStartMs
-
   // A published file carries its own window, so take it from the player
   // rather than guessing which scheduled episode it corresponds to.
   readonly property double windowStartMs: {
     if (onDemand) return player ? player.originWallMs : 0
     if (!schedule) return 0
-    return inPreviousProgramme ? playheadEpisode.startMs : schedule.currentStartMs
+    return heardProgramme ? heardProgramme.startMs : schedule.currentStartMs
   }
   readonly property double windowEndMs: {
     if (onDemand) return player ? player.originWallMs + player.duration * 1000 : 0
     if (!schedule) return 0
-    return inPreviousProgramme ? playheadEpisode.endMs : schedule.currentEndMs
+    return heardProgramme ? heardProgramme.endMs : schedule.currentEndMs
   }
-  // Artwork for the programme being heard. The day schedule carries one per
-  // entry; `rightnow` is the fallback for the programme on air, whose entry
-  // the day list can lag behind over a rollover.
-  readonly property string programmeImage: {
-    if (!schedule) return ""
+
+  // Whether `rightnow` describes the moment being heard. It is the only
+  // source that reflects a schedule SR has revised since the day list was
+  // fetched, so wherever it covers the playhead it is the one to believe.
+  // Between a programme ending and its poll landing it covers nothing, and
+  // there the day list is what knows.
+  readonly property bool rightnowCovers: !onDemand && !!schedule && !!player
+    && schedule.currentStartMs > 0
+    && player.playheadWallMs >= schedule.currentStartMs
+    && player.playheadWallMs < schedule.currentEndMs
+
+  // The programme being heard, resolved once. Its name, its picture and the
+  // timeline's window all read from this single answer, so they cannot end up
+  // describing two different programmes -- looking them up separately is what
+  // put one programme's title beside the next one's artwork for the couple of
+  // seconds a rollover takes to reach `rightnow`.
+  readonly property var heardProgramme: {
+    if (!schedule || !player) return null
     // Depend on the lookup table so this re-evaluates when a programme's
     // artwork arrives.
     var ignored = schedule.programImages
-    var art = schedule.artworkFor(playheadEpisode)
-    if (art !== "") return art
-    if (!inPreviousProgramme) return schedule.currentImage
-    return ""
+    var entry = playheadEpisode
+    if (rightnowCovers) {
+      // The day list normally holds the same programme, and carries the wide
+      // artwork rather than the square one `rightnow` hands out.
+      var same = entry && Math.abs(entry.startMs - schedule.currentStartMs) < 60000
+      return {
+        title: schedule.currentTitle,
+        image: (same ? schedule.artworkFor(entry) : "") || schedule.currentImage,
+        startMs: schedule.currentStartMs,
+        endMs: schedule.currentEndMs
+      }
+    }
+    if (entry) return {
+      title: entry.title,
+      image: schedule.artworkFor(entry),
+      startMs: entry.startMs,
+      endMs: entry.endMs
+    }
+    return null
   }
+
+  readonly property string programmeImage: heardProgramme ? heardProgramme.image : ""
 
   // What the caption shows: the programme last resolved, held across restarts.
   //
@@ -80,7 +105,7 @@ Item {
     var title = programmeTitle
     var image = programmeImage
     var startMs = onDemand ? windowStartMs
-      : (playheadEpisode ? playheadEpisode.startMs : 0)
+      : (heardProgramme ? heardProgramme.startMs : 0)
     // Nothing resolved yet -- mid-restart. Keep what is on screen.
     if (startMs === 0 && title === "") return
     if (startMs !== heldStartMs) {
@@ -99,11 +124,12 @@ Item {
   onProgrammeImageChanged: refreshHeld()
   onWindowStartMsChanged: refreshHeld()
 
-  // The programme actually being heard.
+  // The programme actually being heard. A published file is named by whatever
+  // asked for it; everything else comes from the one lookup above, the same
+  // answer the picture and the timeline use.
   readonly property string programmeTitle: {
     if (onDemand) return player ? player.programme : ""
-    if (!schedule) return ""
-    return inPreviousProgramme ? playheadEpisode.title : schedule.currentTitle
+    return heardProgramme ? heardProgramme.title : ""
   }
 
   // Back steps to the start of what we can reach; once there, to the previous
