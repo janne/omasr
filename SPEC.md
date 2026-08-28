@@ -54,6 +54,12 @@ Lit red lamp while on the live edge; otherwise a button that returns there.
 Returning from a recorded programme re-tunes the channel, since a file has no
 live edge to seek to.
 
+**The lamp answers to the measured lag, not only to intent.** A player whose
+audio has fallen behind the broadcast is not on the live edge, however it got
+there -- the machine slept, the stream stalled -- and the lamp is then the
+button that fixes it. Waking rejoins the broadcast by itself if that is where
+you were; a deliberate step back keeps its place.
+
 ### Timeline
 
 Spans the programme being heard, labelled with its broadcast start and end.

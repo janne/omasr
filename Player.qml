@@ -145,13 +145,30 @@ Item {
 
   readonly property double playheadWallMs: originWallMs + timePos * 1000
 
-  // Wall-clock time of the newest audio this player actually holds. After the
-  // machine sleeps, or a long pause, this sits far behind the clock: the
-  // player cannot reach live by seeking and has to be re-tuned.
-  readonly property double cacheHeadWallMs: originWallMs + cacheEnd * 1000
+  // How far behind the broadcast the playhead may sit and still count as
+  // following it.
+  //
+  // Ordinary live playback runs a segment or two back: measured on SR's HLS,
+  // 2 to 12 seconds after seeking to the cache head and 14 to 20 straight
+  // after tuning in, which starts a segment further back. This clears both
+  // bands, and a stall of half a minute with them, while still being far
+  // under any sleep worth noticing -- and a sleep is caught by the clock tick
+  // regardless of this figure.
+  property real liveToleranceSec: 90
+
+  // Whether the live edge can be reached by seeking inside what this player
+  // already holds. After the machine sleeps, or the stream stalls, it holds
+  // nothing newer than the moment it fell behind, and seeking to the head of
+  // that cache lands where the playhead already is. Reaching live then means
+  // re-tuning.
+  //
+  // Read from the playhead rather than from the cache head, which is not an
+  // independent measurement: `originWallMs` is re-anchored below so that the
+  // cache head *is* now, which made the older test true by construction and
+  // left this permanently, quietly true.
   readonly property bool canReachLive: mode === "live"
     && !dvrStarted
-    && (nowMs - cacheHeadWallMs) < 15000
+    && behindLiveSec < liveToleranceSec
 
   // The furthest point that can be reached.
   //
@@ -182,14 +199,17 @@ Item {
   readonly property real behindLiveSec: Math.max(0, (liveWallMs - playheadWallMs) / 1000)
 
   // Whether the listener has deliberately stepped off the live edge.
-  //
-  // This is tracked rather than measured. mpv always holds a few seconds of
-  // buffer, so the playhead trails the cache head even during ordinary live
-  // playback -- comparing the two would report "time-shifted" permanently.
-  // Rewinding and pausing are what actually put you behind; Direkt is what
-  // brings you back.
+  // Rewinding and pausing are what set this; Direkt is what clears it.
   property bool timeShifted: false
+
+  // Following the broadcast. Being asked to stay there is not the same as
+  // being there: a machine that slept leaves the player holding audio as old
+  // as the sleep, without anything having been rewound. So the lamp answers
+  // to the measured lag as well as to the listener's own intent -- otherwise
+  // it reports live while playing an hour-old programme, and the one control
+  // that would fix it looks like it is already doing its job.
   readonly property bool atLive: mode === "live" && !timeShifted
+    && behindLiveSec < liveToleranceSec
 
   readonly property bool canSeek: status === "playing" && ipc.ready
 

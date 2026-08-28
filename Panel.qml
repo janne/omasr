@@ -384,6 +384,12 @@ Panel {
       schedule.refresh()
       schedule.loadDays()
       liveWindow.refresh()
+      // Everything the player holds was buffered before the machine slept, so
+      // playing on from it means hearing audio as old as the sleep. Someone
+      // following the broadcast wants the broadcast, which now means rejoining
+      // it; someone who had stepped back deliberately keeps their place.
+      if (player.active && player.mode === "live" && !player.timeShifted)
+        root.returnToLive()
     }
   }
 
