@@ -451,6 +451,16 @@ Item {
     if (isFinite(startIndex) && startIndex >= 0)
       proc.command = proc.command.concat(
         ["--demuxer-lavf-o=live_start_index=" + Math.round(startIndex)])
+    else if (mode === "live")
+      // Join at the newest segment rather than at ffmpeg's default of three
+      // back. Those three are how far behind the broadcast the playhead then
+      // sits for as long as the stream runs -- measured at 15 to 16 seconds
+      // on SR's playlist, against 3 to 9 seconds joining at the end -- and it
+      // showed: the marker sat visibly short of the live edge on a bar
+      // spanning a short programme. The cost is a thinner cushion against a
+      // stalled connection, which is the same cushion any player sitting at
+      // the live edge has.
+      proc.command = proc.command.concat(["--demuxer-lavf-o=live_start_index=-1"])
     ipc.socketPath = socketPath
     proc.running = true
     ipc.beginConnect()

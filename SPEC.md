@@ -7,11 +7,12 @@ checks and the thing to update *first* when behaviour should change.
 
 Everything follows from there being two ways to hear a programme:
 
-- **live** — the channel's HLS live stream, which carries a rolling DVR window
-  of roughly **three hours** stamped with absolute times. Anything inside that
-  window can be played, whatever the programme is. Small moves use what the
-  player has already buffered; reaching further back restarts the stream at
-  the right segment, because ffmpeg will not seek inside a live playlist.
+- **live** — the channel's HLS live stream, joined at its newest segment. It
+  carries a rolling DVR window of roughly **three hours** stamped with absolute
+  times. Anything inside that window can be played, whatever the programme is.
+  Small moves use what the player has already buffered; reaching further back
+  restarts the stream at the right segment, because ffmpeg will not seek inside
+  a live playlist.
 
   Playback can therefore only begin on a **segment boundary**, about every 6
   seconds. An instant inside a segment rounds *up*, to the boundary at or after
