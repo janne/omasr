@@ -120,11 +120,16 @@ Item {
   // than remembered as done.
   property string loadedDays: ""
   property bool daysLoading: false
+  property double daysLoadingSince: 0
 
   function loadDays() {
     if (channelId <= 0) { daySchedule = []; loadedDays = ""; return }
-    if (daysLoading) return
+    // A request the machine slept through can be left hanging, and its
+    // callback never arrives to clear this. The guard is against two loads at
+    // once, not against ever trying again, so it lapses.
+    if (daysLoading && Date.now() - daysLoadingSince < 30000) return
     daysLoading = true
+    daysLoadingSince = Date.now()
     var stamp = dateStamp(0)
     var merged = []
     var pending = 2
