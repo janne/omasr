@@ -784,16 +784,29 @@ Panel {
     iconComponent: Component {
       Item {
         SrMark {
+          id: mark
           anchors.centerIn: parent
           iconSize: Style.space(11)
           color: root.barIconColor
 
           // A slow breath while connecting; nothing once audio is flowing.
           SequentialAnimation on opacity {
+            id: breath
             running: player.status === "connecting"
             loops: Animation.Infinite
             NumberAnimation { to: 0.35; duration: 560; easing.type: Easing.InOutSine }
             NumberAnimation { to: 1.0;  duration: 560; easing.type: Easing.InOutSine }
+          }
+
+          // Animating a property replaces its binding for good, so the breath
+          // leaves the mark at whatever opacity the stream happened to connect
+          // at -- a quick tune-in stops it near full, a slow one near 0.35, and
+          // the icon then sits dimmed for the whole session. Restore it.
+          Connections {
+            target: breath
+            function onRunningChanged() {
+              if (!breath.running) mark.opacity = 1.0
+            }
           }
         }
       }

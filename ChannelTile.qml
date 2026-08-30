@@ -118,10 +118,21 @@ Item {
       }
 
       SequentialAnimation on opacity {
+        id: pulse
         running: root.connecting
         loops: Animation.Infinite
         NumberAnimation { to: 0.25; duration: 520; easing.type: Easing.InOutSine }
         NumberAnimation { to: 1.0;  duration: 520; easing.type: Easing.InOutSine }
+      }
+
+      // Same hazard as the bars above: where the pulse stops depends on how
+      // long the stream took to connect, so a playing meter could be left
+      // faded. Bring it back to full once the pulse is done.
+      Connections {
+        target: pulse
+        function onRunningChanged() {
+          if (!pulse.running) meter.opacity = 1.0
+        }
       }
     }
   }
