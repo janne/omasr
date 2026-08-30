@@ -69,6 +69,15 @@ most of a day.
 Pausing counts as stepping back: the broadcast carries on without you, and
 resuming picks up where you stopped. **Direkt** returns to the live edge.
 
+### Reloads
+
+Removing or editing any plugin reloads all of them, which tears this one down
+and takes the stream with it. What was playing is written down in the widget's
+own entry in `~/.config/omarchy/shell.json` and picked up again on the way
+back: the same channel, the same distance behind the broadcast, and still
+paused if it was paused. Stopping clears the note, so a reload after it comes
+back idle -- and so does logging in, which never starts the radio by itself.
+
 ## Install
 
 ```bash
@@ -107,8 +116,9 @@ That takes it off the bar, unloads it from the running shell, and deletes it —
 one step, no restart. Installed from a checkout, it unlinks instead and leaves
 the working copy alone.
 
-Your settings live in the widget's entry in `~/.config/omarchy/shell.json`, so
-they go with it; re-adding starts from the defaults. Nothing else of yours is
+Your settings live in the widget's entry in `~/.config/omarchy/shell.json`,
+along with the note of what was playing, so they go with it; re-adding starts
+from the defaults. Nothing else of yours is
 touched: the plugin only ever writes to its own mpv control socket under
 `$XDG_RUNTIME_DIR`, and mpv is Omarchy's package, not ours.
 
@@ -186,6 +196,18 @@ when they move things around. The timeline comes from
 the right moment rather than opening at zero and seeking afterwards, which
 would be audible. `omarchy shell omasr status` reports the playhead as a clock
 time, so it can be followed across a handoff.
+
+**Surviving a reload.** The shell reloads every plugin whenever any of them
+changes, which destroys the widget and the stream with it. The note it leaves
+behind records how far *behind the present* the playhead was rather than where
+it was: the playhead and the clock advance together, so that figure holds while
+playing and only a seek, a pause or a change of channel has to rewrite it. A
+paused playhead is standing still, so that case records the instant instead.
+Coming back is the same lookup a seek does -- the DVR window first, a published
+file beyond it -- so a session written two hours ago is resumed through
+whichever source still reaches that moment. mpv outlives the widget by a few
+seconds when torn down, so any stray is swept up before a resumed stream
+starts.
 
 **Walking the schedule.** Stepping between programmes needs the schedule
 *around the programme being heard*, not around the live one — otherwise every press finds

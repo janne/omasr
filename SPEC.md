@@ -164,9 +164,47 @@ without you and resuming picks up where you stopped.
 The playing channel's level meter settles flat while paused, rather than
 carrying on or freezing part-way through a bounce.
 
+## Surviving a reload
+
+Removing or editing any plugin reloads all of them: the widget is destroyed and
+built again, and the stream it was playing goes with it. So what is playing is
+written down, in the widget's own entry in `~/.config/omarchy/shell.json`, and
+picked up again on the way back in.
+
+    "session": { "channel": "p1", "screen": "eDP-1", "lag": 1502 }
+
+**A lag, not a position.** The playhead and the clock advance together, so how
+far behind the present it sits does not change while playing: a note in those
+terms stays true on its own, and only a seek, a pause or a change of channel
+makes it wrong. A paused playhead is standing still instead, so that case notes
+the instant it stopped at (`"paused": true, "at": …`).
+
+**Resuming is the same choice a seek makes**: the DVR window wherever it
+reaches, a published file beyond it, and the live broadcast when neither has
+anything to offer. A note is therefore resumed through whichever source still
+holds that moment, which need not be the one it was written from -- and it
+lands on a segment boundary, as any jump does.
+
+- **Paused comes back paused.** Nothing plays that the listener had stopped.
+- **Stopping is forgotten.** Pressing stop clears the note, and a reload after
+  it comes back idle.
+- **Logging in is not a reload.** The note is acted on only by a shell that has
+  been up for a while; one that has just started clears it instead, so logging
+  in never starts the radio by itself. Neither does restarting the shell.
+- **One screen resumes.** A copy of the widget runs on every screen, each with
+  its own player, so the note names the screen that was playing. Where that
+  screen has since gone, the first one picks the session up rather than losing
+  it.
+- **What the last life left running is killed first.** mpv outlives the widget
+  that spawned it: being torn down asks it to stop, but it can carry on playing
+  for seconds afterwards, out of reach. The way in sweeps up any stray before
+  starting anything, so resuming can never mean two streams.
+
 ## Rules that hold everywhere
 
-1. **One mpv process.** Never two, never zero while something is playing.
+1. **One mpv process.** Never two, never zero while something is playing --
+   across a reload as well, where the process the last life left behind is
+   swept up before a resumed one starts.
 2. **The playhead never passes the present.** No seek, in either source, may
    reach audio that has not been broadcast.
 3. **Live means live.** Direkt reaches the actual broadcast, not the head of

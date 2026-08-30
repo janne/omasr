@@ -66,11 +66,21 @@ Panel {
   // Play a published programme file on the tuned-in channel, keeping the
   // channel identity so the tile stays lit and Direkt still returns to live.
   // Play the live stream from a moment inside its DVR window.
-  function playLiveFrom(wallMs) {
-    if (!playingTile) return
-    var tile = playingTile
+  //
+  // `onTile` and `paused` are for resuming a session: there is no tuned-in
+  // channel yet to take the identity from, and a session that was paused has
+  // to come back paused.
+  function playLiveFrom(wallMs, onTile, paused) {
+    var tile = onTile || playingTile
+    if (!tile) return
     liveWindow.locate(wallMs, function(spot) {
-      if (!spot) { player.seekToWall(wallMs); return }   // window moved; clamp
+      // The window moved under the lookup. Clamp where we are, or -- with
+      // nothing playing to clamp -- simply tune in.
+      if (!spot) {
+        if (player.active) player.seekToWall(wallMs)
+        else player.play(tile, paused)
+        return
+      }
       player.playSource({
         key: tile.key,
         name: tile.name,
@@ -82,22 +92,25 @@ Panel {
         startIndex: spot.index,
         // Position 0 of this player is the start of that segment.
         originWallMs: spot.startMs,
-        timeShifted: true
+        timeShifted: true,
+        paused: !!paused
       })
     })
   }
 
-  function playProgramme(audio, atSec) {
-    if (!audio || !playingTile) return
+  function playProgramme(audio, atSec, onTile, paused) {
+    var tile = onTile || playingTile
+    if (!audio || !tile) return
     player.playSource({
-      key: playingTile.key,
-      name: playingTile.name,
-      station: playingTile.station,
+      key: tile.key,
+      name: tile.name,
+      station: tile.station,
       programme: audio.title,
       url: audio.url,
       mode: "ondemand",
       originWallMs: audio.startMs,
       duration: audio.duration,
+      paused: !!paused,
       // Clamp into the file. A slot is often filled with a repeat whose file
       // is shorter than the slot it occupies, so a wall-clock offset can point
       // past the end of it -- and opening a file past its end just ends it.
@@ -326,6 +339,244 @@ Panel {
     }
   }
 
+  // --- the session note -----------------------------------------------------
+  //
+  // Removing or editing any plugin reloads all of them: this widget is
+  // destroyed and built again, and the stream it was playing is torn down with
+  // it. So what was playing is written down in the widget's own entry in
+  // shell.json, and read back on the way in.
+  //
+  // The note records a *lag* rather than a position. The playhead and the
+  // clock advance together, so how far behind the present it sits does not
+  // change while playing: a note in those terms stays true on its own, and
+  // only a seek, a pause or a change of channel makes it wrong. A paused
+  // playhead is standing still instead, so that case notes the instant.
+
+  // The host shell, which owns shell.json. Injected through the bar.
+  readonly property var host: bar && bar.shell ? bar.shell : null
+
+  // Which screen's copy of the widget this is. One exists per screen, each
+  // with its own player, so the note names the one it belongs to -- otherwise
+  // a two-monitor desk comes back from a reload playing the same channel
+  // twice, which is the one thing the plugin never does.
+  readonly property string screenName: {
+    var window = root.QsWindow ? root.QsWindow.window : null
+    return window && window.screen ? String(window.screen.name || "") : ""
+  }
+
+  readonly property real lagSec: Math.max(0, (player.nowMs - player.playheadWallMs) / 1000)
+
+  // What the note would say right now, or null for nothing worth resuming: a
+  // stopped player is worth forgetting -- pressing stop and reloading must not
+  // bring the radio back -- and an error state is not worth returning to.
+  readonly property var sessionNote: {
+    if (!player.active || player.status === "error") return null
+    var note = { channel: player.channelKey }
+    if (screenName !== "") note.screen = screenName
+    if (player.paused) {
+      note.paused = true
+      note.at = Math.round(player.playheadWallMs)
+    } else if (!player.atLive) {
+      note.lag = Math.round(lagSec)
+    }
+    return note
+  }
+
+  property var writtenNote
+
+  // Compared loosely. The lag is a measurement -- it wobbles by a second or
+  // two as segments arrive -- and a note that answered every wobble would
+  // rewrite the config file continuously for no gain: resuming rounds to a
+  // segment boundary anyway.
+  function noteDiffers(a, b) {
+    if (!a || !b) return !!a !== !!b
+    if (a.channel !== b.channel) return true
+    if (!!a.paused !== !!b.paused) return true
+    if (a.paused) return Math.abs((a.at || 0) - (b.at || 0)) > 2000
+    return Math.abs((a.lag || 0) - (b.lag || 0)) > 5
+  }
+
+  function captureSession() {
+    if (!noteDiffers(sessionNote, writtenNote)) return
+    writtenNote = sessionNote
+    persistSession(sessionNote)
+  }
+
+  // This widget's entry as the shell currently holds it.
+  //
+  // Not the `settings` the bar injects. A widget that writes to its own entry
+  // is handed the new value directly, and the bar patches its layout in place
+  // rather than rebuilding it -- but the entry the *next* build is handed is
+  // the one the layout was built from, which is the note as it stood a rebuild
+  // ago. Exactly the note being looked for is the one missing from it.
+  function configuredEntry() {
+    var config = host ? host.shellConfig : null
+    if (!config) return null
+    var layout = config.bar && config.bar.layout ? config.bar.layout : null
+    var sections = ["left", "center", "right"]
+    if (layout) {
+      for (var s = 0; s < sections.length; s++) {
+        var rows = Array.isArray(layout[sections[s]]) ? layout[sections[s]] : []
+        for (var i = 0; i < rows.length; i++)
+          if (rows[i] && String(rows[i].id || "") === moduleName) return rows[i]
+      }
+    }
+    var plugins = Array.isArray(config.plugins) ? config.plugins : []
+    for (var p = 0; p < plugins.length; p++)
+      if (plugins[p] && String(plugins[p].id || "") === moduleName) return plugins[p]
+    return null
+  }
+
+  function entryNote() {
+    var entry = configuredEntry()
+    var note = entry ? entry.session : null
+    return note && typeof note === "object" ? note : null
+  }
+
+  // The host rewrites the whole entry, so everything else in it has to be
+  // handed back with it: leaving a key out is deleting it.
+  function persistSession(note) {
+    if (!host || typeof host.updateEntryInline !== "function") return
+    var current = configuredEntry() || settings || ({})
+    var entry = ({})
+    for (var key in current) if (key !== "id" && key !== "session") entry[key] = current[key]
+    if (note) entry.session = note
+    host.updateEntryInline(moduleName, entry)
+  }
+
+  // --- resuming -------------------------------------------------------------
+  //
+  // Coming back is not a matter of pressing play: the instant to resume at has
+  // to be placed in the DVR window or in a published file, and neither the
+  // window nor the schedule is known until the channel is. So the tile is
+  // adopted first -- which is what starts both of them loading -- and the
+  // decision waits for whichever of them answers.
+
+  // The channel the window and the schedule are read for: normally whatever is
+  // playing, and during a resume the channel that is about to be.
+  readonly property var sourceTile: playingTile || resumingTile
+  property var resumingTile: null
+  property double resumeWallMs: 0
+  property bool resumePaused: false
+  property bool resuming: false
+  property double resumeDeadline: 0
+  property bool sessionRestored: false
+
+  // How long to wait for the window and the schedule before giving up and
+  // simply tuning in live. Both are a single round trip; this is generous.
+  readonly property int resumeWaitMs: 8000
+
+  // A resume is for a reload, never for a fresh start: the shell coming up is
+  // a login, and logging in must not start the radio by itself. The shell's
+  // own launch time is what tells the two apart -- a reload leaves it hours
+  // behind, while a login has it a moment old.
+  readonly property int coldStartMs: 20000
+
+  // Nothing sits exactly on the live edge: a note taken there records no lag
+  // at all, and a pause taken there records an instant that is already a few
+  // seconds old, since ordinary live playback runs a segment or two back.
+  // Within this of the present, resuming means simply tuning in -- which for a
+  // paused session has to cover the whole of that lag, and for a rewound one
+  // need only cover the moment the note took to write.
+  readonly property int liveEdgeGraceMs: resumePaused ? 20000 : 3000
+
+  function restoreSession() {
+    var note = entryNote()
+    if (!note) return
+    // One instance of this widget exists per screen. Only the one the note
+    // belongs to acts on it -- and only that one sweeps, so a sweep can never
+    // reach a stream another instance has just started.
+    if (!resumesHere(String(note.screen || ""))) return
+    // Whatever the life before this one left playing goes first: it is out of
+    // reach of this one either way, and a resumed stream must not join it.
+    player.sweepStrays()
+    // Written by a shell that has since gone away. Forgotten rather than
+    // acted on, or the first reload after logging in -- hours later, with the
+    // shell long up -- would start playing what was on yesterday.
+    if (Date.now() - Quickshell.launchTime.getTime() < coldStartMs) { persistSession(null); return }
+    var tile = tileFor(String(note.channel || ""))
+    if (!tile) return
+    resumePaused = note.paused === true
+    resumeWallMs = resumePaused
+      ? Number(note.at) || 0
+      : (Number(note.lag) > 0 ? Date.now() - Number(note.lag) * 1000 : 0)
+    resumingTile = tile
+    resumeDeadline = Date.now() + resumeWaitMs
+    resuming = true
+  }
+
+  // Only the screen the note names picks it up -- or, where that screen has
+  // since gone (a laptop undocked while it slept), the first one, so an
+  // undocked session is resumed rather than lost. A note that names no screen
+  // is nobody's in particular, and goes to the first screen for the same
+  // reason: exactly one instance must act on it.
+  function resumesHere(noteScreen) {
+    if (screenName === "") return true
+    var screens = Quickshell.screens || []
+    var target = ""
+    for (var i = 0; i < screens.length; i++) {
+      var name = String(screens[i].name || "")
+      if (name === noteScreen) { target = name; break }
+      if (target === "") target = name
+    }
+    return target === "" || target === screenName
+  }
+
+  // The choice seekToWall makes, made without a player to ask: the DVR window
+  // wherever it reaches, a published file beyond it, and the live broadcast
+  // when neither has anything to offer.
+  function tryResume() {
+    var tile = resumingTile
+    if (!tile) { resuming = false; return }
+    var at = resumeWallMs
+    // On the live edge, or as near as makes no difference: nothing to place.
+    if (at <= 0 || Date.now() - at < liveEdgeGraceMs) {
+      resuming = false
+      player.play(tile, resumePaused)
+      return
+    }
+    if (liveWindow.covers(at)) {
+      resuming = false
+      playLiveFrom(at, tile, resumePaused)
+      return
+    }
+    // A window that has not landed yet is not a window that fails to reach:
+    // wait for both answers before falling back to a file, and for neither
+    // past the deadline.
+    if (Date.now() < resumeDeadline
+        && !(liveWindow.known && schedule.daySchedule.length > 0)) return
+    resuming = false
+    var episode = schedule.episodeAt(at)
+    if (!episode) { player.play(tile, resumePaused); return }
+    schedule.resolveAudio(episode.id, episode.startMs, episode.title, function(audio) {
+      if (audio) root.playProgramme(audio, (at - audio.startMs) / 1000, tile, root.resumePaused)
+      else player.play(tile, root.resumePaused)
+    })
+  }
+
+  // When the widget was built, so a note cannot be acted on long afterwards:
+  // the config changes whenever any widget writes to it, and a resume is only
+  // ever a reaction to having just been rebuilt.
+  readonly property double loadedAt: Date.now()
+
+  // The note becomes readable when the bar hands over its settings, which is
+  // also when `host` arrives -- or, on a shell still starting, when the user's
+  // config lands after that. Either can be the one that carries it.
+  function considerSession() {
+    if (sessionRestored || Date.now() - loadedAt > 30000) return
+    if (!entryNote()) return
+    sessionRestored = true
+    restoreSession()
+  }
+
+  onSettingsChanged: considerSession()
+
+  Connections {
+    target: root.host
+    ignoreUnknownSignals: true
+    function onShellConfigChanged() { root.considerSession() }
+  }
+
   function indexOfKey(key) {
     for (var i = 0; i < tiles.length; i++) if (tiles[i].key === key) return i
     return -1
@@ -366,8 +617,39 @@ Panel {
       : player.station
   }
 
+  // The note is kept up to date on a slow tick rather than bound to the
+  // transport: the lag changes on every position mpv reports, and only a
+  // handful of those changes mean anything.
+  Timer {
+    running: player.active
+    interval: 5000
+    repeat: true
+    onTriggered: root.captureSession()
+  }
+
+  // Deliberately not triggered on start. The sweep that clears the last life's
+  // stream runs detached, and a stream started in the same breath would be
+  // inside its window -- one tick is the room it needs.
+  Timer {
+    running: root.resuming
+    interval: 250
+    repeat: true
+    onTriggered: root.tryResume()
+  }
+
   Connections {
     target: player
+
+    // Stopping clears the note at once. Waiting for the tick would leave a
+    // window in which a reload brought back a channel that had been switched
+    // off -- and tuning in is worth writing down before anything else can go
+    // wrong.
+    function onActiveChanged() {
+      root.captureSession()
+      // The resumed channel now has a player to take its identity from.
+      if (player.active) root.resumingTile = null
+    }
+
     // A programme running out continues with the next one, just as the
     // broadcast did -- and rejoins the live feed once it catches up.
     function onProgrammeEnded() { root.stepForward() }
@@ -395,12 +677,12 @@ Panel {
 
   LiveWindow {
     id: liveWindow
-    masterUrl: root.playingTile ? root.playingTile.url : ""
+    masterUrl: root.sourceTile ? root.sourceTile.url : ""
   }
 
   Schedule {
     id: schedule
-    channelId: root.playingTile ? root.playingTile.id : 0
+    channelId: root.sourceTile ? root.sourceTile.id : 0
   }
 
   IpcHandler {

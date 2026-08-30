@@ -303,6 +303,54 @@ if group "future"; then
   is "and stays controllable" "$(seekable)" "yes"
 fi
 
+# --------------------------------------------------------------- reload
+# Removing or editing any plugin reloads all of them, which destroys this
+# widget and the stream with it. What was playing has to come back.
+if group "reload"; then
+  note()   { python3 -c 'import json, sys
+d = json.load(open(sys.argv[1]))
+for rows in d["bar"]["layout"].values():
+  for r in rows:
+    if r.get("id") == "omasr.radio":
+      print(json.dumps(r.get("session")))
+      sys.exit(0)
+print("null")' "$HOME/.config/omarchy/shell.json"; }
+  # How far behind the broadcast the playhead sits, as a bare number.
+  lag()    { mode | tr -dc '0-9'; }
+  reload() { omarchy-shell shell rescanPlugins >/dev/null 2>&1; sleep 4; }
+
+  sr play $CH >/dev/null; settle; ready
+  sr back 900 >/dev/null; sleep 3; ready
+  before=$(lag)
+  isnt "a time-shifted session is written down" "$(note)" "null"
+  reload; settle; ready
+  after=$(lag)
+  is "the reloaded session is still playing" "$(status | cut -d' ' -f1)" "playing"
+  is "and leaves one process"                "$(procs)" "1"
+  if [ -z "$before" ] || [ -z "$after" ]; then
+    skip "and comes back where it was" "no playhead"
+  else
+    # It resumes at the lag it noted down, landing on a segment boundary --
+    # a handful of seconds either way, not somewhere else entirely.
+    drift=$(( after - before ))
+    if [ "${drift#-}" -le 20 ]; then
+      ok "and comes back where it was"
+    else
+      no "and comes back where it was" "${drift}s from -${before}s"
+    fi
+  fi
+
+  sr live >/dev/null; settle; ready
+  reload; settle
+  is "a live session comes back live" "$(mode)" "live"
+
+  sr stop >/dev/null; sleep 2
+  is "stopping forgets the session"        "$(note)" "null"
+  reload
+  is "and a reload after it stays stopped" "$(status)" "idle"
+  is "with nothing left running"           "$(procs)" "0"
+fi
+
 # --------------------------------------------------------------- teardown
 if group "teardown"; then
   sr play $CH >/dev/null; sleep 6

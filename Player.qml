@@ -237,8 +237,10 @@ Item {
     _start(source)
   }
 
-  // Tune in to a live channel (a Channels.js entry).
-  function play(channel) {
+  // Tune in to a live channel (a Channels.js entry). `paused` is for a session
+  // resumed from a note that was kept paused: coming back from a reload must
+  // not start audio the listener had stopped.
+  function play(channel, paused) {
     if (!channel) return
     playSource({
       key: channel.key,
@@ -247,7 +249,8 @@ Item {
       url: channel.url,
       mode: "live",
       originWallMs: 0,   // stamped at spawn: "now"
-      duration: 0
+      duration: 0,
+      paused: !!paused
     })
   }
 
@@ -353,6 +356,21 @@ Item {
     Quickshell.execDetached(["rm", "-f", path])
   }
 
+  // mpv outlives the widget that started it. A plugin reload -- which
+  // removing or editing any plugin causes -- destroys the panel and builds it
+  // again, but the child it spawned carries on, orphaned: still playing, no
+  // longer reachable over an IPC socket nothing knows the path of any more.
+  // It dies eventually, when it next writes to a pipe with no reader left,
+  // which can be seconds later and sounds like the radio refusing to stop.
+  //
+  // So a life that is starting sweeps up whatever the one before it left
+  // running, before starting anything of its own. Matched on the socket path,
+  // which no other program has a reason to name.
+  function sweepStrays() {
+    // Without the leading dashes, which pkill would read as options of its own.
+    Quickshell.execDetached(["pkill", "-f", "input-ipc-server=[^ ]*/omasr-mpv-"])
+  }
+
   function _resetTransport(startAtSec) {
     playlistPos = 1
     timePos = Number(startAtSec) || 0
@@ -382,10 +400,15 @@ Item {
     lastError = ""
     status = "connecting"
     mode = source.mode || "live"
-    timeShifted = !!source.timeShifted
+    // A source that opens paused is off the live edge whatever else it says:
+    // that is what pausing did to the session being resumed.
+    timeShifted = !!source.timeShifted || !!source.paused
     dvrStarted = isFinite(Number(source.startIndex)) && Number(source.startIndex) >= 0
     _source = source
     _resetTransport(source.startAtSec)
+    // Shown straight away rather than when mpv reports the property back, so
+    // the transport does not flash as playing on the way in.
+    paused = !!source.paused
 
     // A previous child is still shutting down; hand off to onExited.
     if (proc.running) {
@@ -445,6 +468,10 @@ Item {
     // Seeking after playback starts would be audible as a stutter, so let mpv
     // open the file at the right place instead.
     if (startAt > 0) proc.command = proc.command.concat(["--start=" + startAt.toFixed(2)])
+    // A session resumed from a note that was kept paused opens paused, so not
+    // a moment of it is heard. mpv still announces that playback started, so
+    // the transport comes up controllable rather than stuck in "connecting".
+    if (_source.paused) proc.command = proc.command.concat(["--pause=yes"])
     // Begin at a chosen point in the live DVR window. ffmpeg will not seek
     // inside a live playlist, but it will start at a given segment.
     if (mprisScript !== "") proc.command = proc.command.concat(["--script=" + mprisScript])
@@ -778,6 +805,8 @@ Item {
   }
 
   // The shell outlives any one panel; never leave a stream playing behind a
-  // closed or unloaded widget.
+  // closed or unloaded widget. Asking is not the same as it happening, though:
+  // a plugin reload destroys the whole tree at once and the child can outlive
+  // the request by a good few seconds, which is what sweepStrays() is for.
   Component.onDestruction: if (proc.running) proc.running = false
 }
