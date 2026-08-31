@@ -963,6 +963,8 @@ Panel {
             id: captionTitle
             width: parent.width
             text: transport.heldTitle
+            // SR writes this; nothing it sends should be read as markup.
+            textFormat: Text.PlainText
             visible: text !== ""
             color: root.foreground
             font.family: root.fontFamily
@@ -983,6 +985,8 @@ Panel {
                 return icy.substring(show.length).replace(/^[\s,\u00b7-]+/, "")
               return icy
             }
+            // Straight off the stream, so markup-shaped titles stay literal.
+            textFormat: Text.PlainText
             visible: text !== ""
             color: root.dim
             font.family: root.fontFamily
